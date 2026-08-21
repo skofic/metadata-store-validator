@@ -1,0 +1,25 @@
+[
+	{ "_label": "_object_GeoJSON: valid Point passes",                "_data": { "_object_GeoJSON": {} }, "_value": { "type": "Point", "coordinates": [12.4964, 41.9028] }, "_expect": "pass" },
+	{ "_label": "_object_GeoJSON: valid counter-clockwise Polygon",   "_data": { "_object_GeoJSON": {} }, "_value": { "type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]] }, "_expect": "pass" },
+	{ "_label": "_object_GeoJSON: valid Polygon with a hole",         "_data": { "_object_GeoJSON": {} }, "_value": { "type": "Polygon", "coordinates": [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]], [[2, 2], [2, 4], [4, 4], [4, 2], [2, 2]]] }, "_expect": "pass" },
+
+	{ "_label": "_object_GeoJSON: coordinates as a string fails",     "_data": { "_object_GeoJSON": {} }, "_value": { "type": "Point", "coordinates": "banana" }, "_expect": "fail", "_codes": ["INVALID_GEOJSON"] },
+	{ "_label": "_object_GeoJSON: Point missing coordinates fails",   "_data": { "_object_GeoJSON": {} }, "_value": { "type": "Point" }, "_expect": "fail", "_codes": ["INVALID_GEOJSON"] },
+	{ "_label": "_object_GeoJSON: longitude out of range fails",      "_data": { "_object_GeoJSON": {} }, "_value": { "type": "Point", "coordinates": [200, 41.9] }, "_expect": "fail", "_codes": ["INVALID_GEOJSON"] },
+	{ "_label": "_object_GeoJSON: unknown geometry type fails",       "_data": { "_object_GeoJSON": {} }, "_value": { "type": "Circle", "coordinates": [0, 0] }, "_expect": "fail", "_codes": ["INVALID_GEOJSON"] },
+
+	{ "_label": "_object_GeoJSON: clockwise exterior ring fails",     "_data": { "_object_GeoJSON": {} }, "_value": { "type": "Polygon", "coordinates": [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]] }, "_expect": "fail", "_codes": ["INVALID_GEOJSON_WINDING"] },
+	{ "_label": "_object_GeoJSON: counter-clockwise hole fails",      "_data": { "_object_GeoJSON": {} }, "_value": { "type": "Polygon", "coordinates": [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]], [[2, 2], [4, 2], [4, 4], [2, 4], [2, 2]]] }, "_expect": "fail", "_codes": ["INVALID_GEOJSON_WINDING"] },
+	{ "_label": "_object_GeoJSON: self-crossing ring fails",          "_data": { "_object_GeoJSON": {} }, "_value": { "type": "Polygon", "coordinates": [[[0, 0], [1, 1], [1, 0], [0, 1], [0, 0]]] }, "_expect": "fail", "_codes": ["INVALID_GEOJSON"] },
+	{ "_label": "_object_GeoJSON: unclosed ring fails",               "_data": { "_object_GeoJSON": {} }, "_value": { "type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1]]] }, "_expect": "fail", "_codes": ["INVALID_GEOJSON"] },
+	{ "_label": "_object_GeoJSON: duplicate vertex fails (strict)",   "_data": { "_object_GeoJSON": {} }, "_value": { "type": "Polygon", "coordinates": [[[0, 0], [0, 0], [1, 0], [1, 1], [0, 0]]] }, "_expect": "fail", "_codes": ["INVALID_GEOJSON"] },
+	{ "_label": "_object_GeoJSON: hole outside the shell fails",      "_data": { "_object_GeoJSON": {} }, "_value": { "type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]], [[5, 5], [5, 6], [6, 6], [6, 5], [5, 5]]] }, "_expect": "fail", "_codes": ["INVALID_GEOJSON"] },
+	{ "_label": "_object_GeoJSON: two crossing holes fail",           "_data": { "_object_GeoJSON": {} }, "_value": { "type": "Polygon", "coordinates": [[[0, 0], [20, 0], [20, 20], [0, 20], [0, 0]], [[2, 2], [2, 8], [8, 8], [8, 2], [2, 2]], [[6, 6], [6, 12], [12, 12], [12, 6], [6, 6]]] }, "_expect": "fail", "_codes": ["INVALID_GEOJSON"] },
+
+	{ "_label": "_type_GeoJSON narrowing still applies",              "_data": { "_object_GeoJSON": { "_type_GeoJSON": ["_type_GeoJSON_Point"] } }, "_value": { "type": "LineString", "coordinates": [[0, 0], [1, 1]] }, "_expect": "fail", "_codes": ["INVALID_GEOJSON_TYPE"] },
+	{ "_label": "_type_GeoJSON narrowing: allowed type passes",       "_data": { "_object_GeoJSON": { "_type_GeoJSON": ["_type_GeoJSON_Point"] } }, "_value": { "type": "Point", "coordinates": [1, 2] }, "_expect": "pass" },
+	{ "_label": "_type_GeoJSON narrowing: type ok but geometry bad",  "_data": { "_object_GeoJSON": { "_type_GeoJSON": ["_type_GeoJSON_Polygon"] } }, "_value": { "type": "Polygon", "coordinates": [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]] }, "_expect": "fail", "_codes": ["INVALID_GEOJSON_WINDING"] },
+
+	{ "_label": "_array of _object_GeoJSON: valid elements pass",     "_data": { "_array": { "_object_GeoJSON": {} } }, "_value": [{ "type": "Point", "coordinates": [1, 2] }, { "type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]] }], "_expect": "pass" },
+	{ "_label": "_array of _object_GeoJSON: bad element fails",       "_data": { "_array": { "_object_GeoJSON": {} } }, "_value": [{ "type": "Point", "coordinates": [1, 2] }, { "type": "Polygon", "coordinates": [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]] }], "_expect": "fail", "_codes": ["INVALID_GEOJSON_WINDING"] }
+]

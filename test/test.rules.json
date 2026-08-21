@@ -1,0 +1,27 @@
+[
+	{
+		"_label": "prop_a alone: passes",
+		"_descriptor": "_TEST_schema",
+		"_value": { "_TEST_schema_prop_a": "hello" },
+		"_expect": "pass",
+		"_db": true,
+		"_conformance": true
+	},
+	{
+		"_label": "prop_a + prop_b together: banned by rule",
+		"_descriptor": "_TEST_schema",
+		"_value": { "_TEST_schema_prop_a": "hello", "_TEST_schema_prop_b": "world" },
+		"_expect": "fail",
+		"_codes": ["BANNED_PROPERTY"],
+		"_db": true,
+		"_conformance": true
+	},
+	{
+		"_label": "prop_b alone (prop_a absent): passes",
+		"_descriptor": "_TEST_schema",
+		"_value": { "_TEST_schema_prop_b": "world" },
+		"_expect": "pass",
+		"_db": true,
+		"_conformance": true
+	}
+]

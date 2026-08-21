@@ -1,0 +1,26 @@
+[
+	{ "_label": "_object {}: any object passes",             "_data": { "_object": {} },                                                                                                "_value": { "x": 1, "y": "a" },        "_expect": "pass" },
+	{ "_label": "_object {}: string fails",                  "_data": { "_object": {} },                                                                                                "_value": "not an object",             "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+	{ "_label": "_object {}: array fails",                   "_data": { "_object": {} },                                                                                                "_value": [1, 2, 3],                   "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+	{ "_label": "_object {}: null fails",                    "_data": { "_object": {} },                                                                                                "_value": null,                        "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+
+	{ "_label": "_open: required present passes",            "_data": { "_object": { "_open": { "_required": [{ "_selectors": [{ "_all": {} }], "_selection": ["name"] }] } } },        "_value": { "name": "test", "extra": 1 }, "_expect": "pass" },
+	{ "_label": "_open: required absent fails",              "_data": { "_object": { "_open": { "_required": [{ "_selectors": [{ "_all": {} }], "_selection": ["name"] }] } } },        "_value": { "other": "x" },            "_expect": "fail", "_codes": ["MISSING_REQUIRED"] },
+	{ "_label": "_open: extra property allowed",             "_data": { "_object": { "_open": { "_required": [{ "_selectors": [{ "_all": {} }], "_selection": ["name"] }] } } },        "_value": { "name": "a", "anything": 42 }, "_expect": "pass" },
+
+	{ "_label": "_closed: allowed property passes",          "_data": { "_object": { "_closed": { "_recommended": ["name"] } } },                                                       "_value": { "name": "test" },          "_expect": "pass" },
+	{ "_label": "_closed: unknown property fails",           "_data": { "_object": { "_closed": { "_recommended": ["name"] } } },                                                       "_value": { "name": "test", "x": 1 },  "_expect": "fail", "_codes": ["UNKNOWN_PROPERTY"] },
+	{ "_label": "_closed: empty object passes",              "_data": { "_object": { "_closed": { "_recommended": ["name"] } } },                                                       "_value": {},                          "_expect": "pass" },
+	{ "_label": "_closed: required+recommended both allowed","_data": { "_object": { "_closed": { "_required": [{ "_selectors": [{ "_all": {} }], "_selection": ["id"] }], "_recommended": ["label"] } } }, "_value": { "id": "x", "label": "y" }, "_expect": "pass" },
+
+	{ "_label": "_banned: absent passes",                    "_data": { "_object": { "_open": { "_banned": ["forbidden"] } } },                                                         "_value": { "name": "ok" },            "_expect": "pass" },
+	{ "_label": "_banned: present fails",                    "_data": { "_object": { "_open": { "_banned": ["forbidden"] } } },                                                         "_value": { "name": "ok", "forbidden": true }, "_expect": "fail", "_codes": ["BANNED_PROPERTY"] },
+
+	{ "_label": "exactly-one (_all max:1): one passes",      "_data": { "_object": { "_open": { "_required": [{ "_selectors": [{ "_all": { "_min-items": 1, "_max-items": 1 } }], "_selection": ["a", "b", "c"] }] } } }, "_value": { "a": 1 },         "_expect": "pass" },
+	{ "_label": "exactly-one (_all max:1): none fails",      "_data": { "_object": { "_open": { "_required": [{ "_selectors": [{ "_all": { "_min-items": 1, "_max-items": 1 } }], "_selection": ["a", "b", "c"] }] } } }, "_value": { "x": 1 },         "_expect": "fail", "_codes": ["SELECTION_VIOLATION"] },
+	{ "_label": "exactly-one (_all max:1): two fails",       "_data": { "_object": { "_open": { "_required": [{ "_selectors": [{ "_all": { "_min-items": 1, "_max-items": 1 } }], "_selection": ["a", "b", "c"] }] } } }, "_value": { "a": 1, "b": 2 }, "_expect": "fail", "_codes": ["SELECTION_VIOLATION"] },
+
+	{ "_label": "at-least-one (_any min:1): one passes",     "_data": { "_object": { "_open": { "_required": [{ "_selectors": [{ "_any": { "_min-items": 1 } }], "_selection": ["x", "y"] }] } } }, "_value": { "x": 1 },          "_expect": "pass" },
+	{ "_label": "at-least-one (_any min:1): both pass",      "_data": { "_object": { "_open": { "_required": [{ "_selectors": [{ "_any": { "_min-items": 1 } }], "_selection": ["x", "y"] }] } } }, "_value": { "x": 1, "y": 2 }, "_expect": "pass" },
+	{ "_label": "at-least-one (_any min:1): none fails",     "_data": { "_object": { "_open": { "_required": [{ "_selectors": [{ "_any": { "_min-items": 1 } }], "_selection": ["x", "y"] }] } } }, "_value": { "z": 1 },          "_expect": "fail", "_codes": ["SELECTION_VIOLATION"] }
+]

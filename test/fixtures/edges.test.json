@@ -1,0 +1,17 @@
+[
+	{
+		"_from": "terms/_TEST_schema_prop_a",
+		"_predicate": "_predicate_property-of",
+		"_to": "terms/_TEST_schema",
+		"_path": ["terms/_TEST_schema"],
+		"_path_data": {
+			"terms/_TEST_schema": {
+				"_object": {
+					"_open": {
+						"_banned": ["_TEST_schema_prop_b"]
+					}
+				}
+			}
+		}
+	}
+]

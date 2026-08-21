@@ -1,0 +1,94 @@
+[
+	{ "_label": "_number: integer passes",                  "_data": { "_scalar": { "_number": {} } },                                         "_value": 42,              "_expect": "pass" },
+	{ "_label": "_number: float passes",                    "_data": { "_scalar": { "_number": {} } },                                         "_value": 3.14,            "_expect": "pass" },
+	{ "_label": "_number: string fails",                    "_data": { "_scalar": { "_number": {} } },                                         "_value": "42",            "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+	{ "_label": "_number: null fails",                      "_data": { "_scalar": { "_number": {} } },                                         "_value": null,            "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+	{ "_label": "_number: boolean fails",                   "_data": { "_scalar": { "_number": {} } },                                         "_value": true,            "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+
+	{ "_label": "_number_integer: integer passes",          "_data": { "_scalar": { "_number_integer": {} } },                                 "_value": 7,               "_expect": "pass" },
+	{ "_label": "_number_integer: negative integer passes", "_data": { "_scalar": { "_number_integer": {} } },                                 "_value": -5,              "_expect": "pass" },
+	{ "_label": "_number_integer: float fails",             "_data": { "_scalar": { "_number_integer": {} } },                                 "_value": 3.14,            "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+	{ "_label": "_number_integer: string fails",            "_data": { "_scalar": { "_number_integer": {} } },                                 "_value": "7",             "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+
+	{ "_label": "_number_float: float passes",              "_data": { "_scalar": { "_number_float": {} } },                                   "_value": 2.71828,         "_expect": "pass" },
+	{ "_label": "_number_float: integer passes",            "_data": { "_scalar": { "_number_float": {} } },                                   "_value": 42,              "_expect": "pass" },
+	{ "_label": "_number_float: string fails",              "_data": { "_scalar": { "_number_float": {} } },                                   "_value": "3.14",          "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+
+	{ "_label": "_range_valid: value inside passes",        "_data": { "_scalar": { "_number": { "_range_valid": { "_min-inclusive": 0, "_max-exclusive": 100 } } } },   "_value": 50,      "_expect": "pass" },
+	{ "_label": "_range_valid: at min-inclusive passes",    "_data": { "_scalar": { "_number": { "_range_valid": { "_min-inclusive": 0, "_max-exclusive": 100 } } } },   "_value": 0,       "_expect": "pass" },
+	{ "_label": "_range_valid: below min fails",            "_data": { "_scalar": { "_number": { "_range_valid": { "_min-inclusive": 0, "_max-exclusive": 100 } } } },   "_value": -1,      "_expect": "fail", "_codes": ["RANGE_VIOLATION"] },
+	{ "_label": "_range_valid: at max-exclusive fails",     "_data": { "_scalar": { "_number": { "_range_valid": { "_min-inclusive": 0, "_max-exclusive": 100 } } } },   "_value": 100,     "_expect": "fail", "_codes": ["RANGE_VIOLATION"] },
+	{ "_label": "_range_normal: outlier gives RANGE_OUTLIER", "_data": { "_scalar": { "_number": { "_range_normal": { "_max-inclusive": 100 } } } },                    "_value": 150,     "_expect": "fail", "_codes": ["RANGE_OUTLIER"] },
+
+	{ "_label": "_boolean: true passes",                    "_data": { "_scalar": { "_boolean": {} } },                                        "_value": true,            "_expect": "pass" },
+	{ "_label": "_boolean: false passes",                   "_data": { "_scalar": { "_boolean": {} } },                                        "_value": false,           "_expect": "pass" },
+	{ "_label": "_boolean: 1 fails",                        "_data": { "_scalar": { "_boolean": {} } },                                        "_value": 1,               "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+	{ "_label": "_boolean: string 'true' fails",            "_data": { "_scalar": { "_boolean": {} } },                                        "_value": "true",          "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+
+	{ "_label": "_timestamp: integer passes",               "_data": { "_scalar": { "_timestamp": {} } },                                      "_value": 1714000000,      "_expect": "pass" },
+	{ "_label": "_timestamp: float fails",                  "_data": { "_scalar": { "_timestamp": {} } },                                      "_value": 1714000000.5,    "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+	{ "_label": "_timestamp: string fails",                 "_data": { "_scalar": { "_timestamp": {} } },                                      "_value": "2024-01-01",    "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+
+	{ "_label": "_handle: collection/key passes",           "_data": { "_scalar": { "_handle": {} } },                                         "_value": "terms/ISO_639_3_eng", "_expect": "pass" },
+	{ "_label": "_handle: bare word fails",                 "_data": { "_scalar": { "_handle": {} } },                                         "_value": "terms",         "_expect": "fail", "_codes": ["INVALID_HANDLE"] },
+	{ "_label": "_handle: starts with digit fails",         "_data": { "_scalar": { "_handle": {} } },                                         "_value": "123col/key",    "_expect": "fail", "_codes": ["INVALID_HANDLE"] },
+	{ "_label": "_handle: empty string fails",              "_data": { "_scalar": { "_handle": {} } },                                         "_value": "",              "_expect": "fail", "_codes": ["INVALID_HANDLE"] },
+
+	{ "_label": "_string: any string passes",               "_data": { "_scalar": { "_string": {} } },                                         "_value": "hello world",   "_expect": "pass" },
+	{ "_label": "_string: number fails",                    "_data": { "_scalar": { "_string": {} } },                                         "_value": 42,              "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+	{ "_label": "_string: regexp match passes",             "_data": { "_scalar": { "_string": { "_regexp": "^[A-Z]{2,3}$" } } },               "_value": "EN",            "_expect": "pass" },
+	{ "_label": "_string: regexp mismatch fails",           "_data": { "_scalar": { "_string": { "_regexp": "^[A-Z]{2,3}$" } } },               "_value": "english",       "_expect": "fail", "_codes": ["REGEXP_MISMATCH"] },
+
+	{ "_label": "_string_URI: valid URL passes",            "_data": { "_scalar": { "_string_URI": {} } },                                      "_value": "https://example.com/path", "_expect": "pass" },
+	{ "_label": "_string_URI: bare word fails",             "_data": { "_scalar": { "_string_URI": {} } },                                      "_value": "not-a-url",     "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+
+	{ "_label": "_string_Email: valid email passes",        "_data": { "_scalar": { "_string_Email": {} } },                                    "_value": "user@example.com", "_expect": "pass" },
+	{ "_label": "_string_Email: no-at fails",               "_data": { "_scalar": { "_string_Email": {} } },                                    "_value": "notanemail",    "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+
+	{ "_label": "_string_date: YYYY-MM-DD passes",          "_data": { "_scalar": { "_string_date": {} } },                                     "_value": "2024-06-15",    "_expect": "pass" },
+	{ "_label": "_string_date: wrong format fails",         "_data": { "_scalar": { "_string_date": {} } },                                     "_value": "15/06/2024",    "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+
+	{ "_label": "_string_date-time: ISO datetime passes",   "_data": { "_scalar": { "_string_date-time": {} } },                               "_value": "2024-06-15T14:30:00", "_expect": "pass" },
+	{ "_label": "_string_date-time: date-only fails",       "_data": { "_scalar": { "_string_date-time": {} } },                               "_value": "2024-06-15",    "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+
+	{ "_label": "_string_IPv4: valid address passes",       "_data": { "_scalar": { "_string_IPv4": {} } },                                     "_value": "192.168.1.1",   "_expect": "pass" },
+	{ "_label": "_string_IPv4: octet > 255 fails",          "_data": { "_scalar": { "_string_IPv4": {} } },                                     "_value": "999.1.1.1",     "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+
+	{ "_label": "_string_HEX: lowercase hex passes",        "_data": { "_scalar": { "_string_HEX": {} } },                                     "_value": "deadbeef",      "_expect": "pass" },
+	{ "_label": "_string_HEX: uppercase hex passes (case-agnostic)", "_data": { "_scalar": { "_string_HEX": {} } },                            "_value": "DEADBEEF",      "_expect": "pass" },
+	{ "_label": "_string_HEX: non-hex chars fail",          "_data": { "_scalar": { "_string_HEX": {} } },                                     "_value": "xyz",           "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+	{ "_label": "_string_HEX _case_lower: lowercase passes", "_data": { "_scalar": { "_string_HEX": { "_case": "_case_lower" } } },             "_value": "c0ffee",        "_expect": "pass" },
+	{ "_label": "_string_HEX _case_lower: uppercase fails",  "_data": { "_scalar": { "_string_HEX": { "_case": "_case_lower" } } },             "_value": "C0FFEE",        "_expect": "fail", "_codes": ["CASE_MISMATCH"] },
+	{ "_label": "_string_HEX _case_upper: uppercase passes", "_data": { "_scalar": { "_string_HEX": { "_case": "_case_upper" } } },             "_value": "C0FFEE",        "_expect": "pass" },
+	{ "_label": "_string_HEX _case_upper: lowercase fails",  "_data": { "_scalar": { "_string_HEX": { "_case": "_case_upper" } } },             "_value": "c0ffee",        "_expect": "fail", "_codes": ["CASE_MISMATCH"] },
+	{ "_label": "_string_HEX _case: all-digits passes either case", "_data": { "_scalar": { "_string_HEX": { "_case": "_case_upper" } } },      "_value": "12345678",      "_expect": "pass" },
+	{ "_label": "_string_HEX _length: in bounds passes",     "_data": { "_scalar": { "_string_HEX": { "_length": { "_min-length": 4, "_max-length": 8 } } } }, "_value": "c0ffee",     "_expect": "pass" },
+	{ "_label": "_string_HEX _length: too short fails",      "_data": { "_scalar": { "_string_HEX": { "_length": { "_min-length": 4, "_max-length": 8 } } } }, "_value": "ab",         "_expect": "fail", "_codes": ["LENGTH_VIOLATION"] },
+	{ "_label": "_string_HEX _length: too long fails",       "_data": { "_scalar": { "_string_HEX": { "_length": { "_min-length": 4, "_max-length": 8 } } } }, "_value": "0123456789", "_expect": "fail", "_codes": ["LENGTH_VIOLATION"] },
+	{ "_label": "_string _length: in bounds passes",         "_data": { "_scalar": { "_string": { "_length": { "_min-length": 2, "_max-length": 5 } } } },     "_value": "abcd",       "_expect": "pass" },
+	{ "_label": "_string _length: too long fails",           "_data": { "_scalar": { "_string": { "_length": { "_max-length": 3 } } } },                       "_value": "abcdef",     "_expect": "fail", "_codes": ["LENGTH_VIOLATION"] },
+
+	{ "_label": "_string_regexp: valid pattern passes",     "_data": { "_scalar": { "_string_regexp": {} } },                                   "_value": "^[a-z]+$",      "_expect": "pass" },
+	{ "_label": "_string_regexp: invalid pattern fails",    "_data": { "_scalar": { "_string_regexp": {} } },                                   "_value": "[invalid",      "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+
+	{ "_label": "_text: any string passes",                 "_data": { "_scalar": { "_text": {} } },                                            "_value": "# Markdown",    "_expect": "pass" },
+	{ "_label": "_text: number fails",                      "_data": { "_scalar": { "_text": {} } },                                            "_value": 42,              "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+	{ "_label": "_text_Markdown: string passes",            "_data": { "_scalar": { "_text_Markdown": {} } },                                   "_value": "**bold**",      "_expect": "pass" },
+
+	{ "_label": "_scope_enum: plain root string passes",    "_data": { "_scalar": { "_scope_enum": {} } },                                      "_value": "ISO_639_3",     "_expect": "pass" },
+	{ "_label": "_scope_enum: compound root.node passes",   "_data": { "_scalar": { "_scope_enum": {} } },                                      "_value": "ISO_639_3.eng", "_expect": "pass" },
+	{ "_label": "_scope_enum: empty string fails",          "_data": { "_scalar": { "_scope_enum": {} } },                                      "_value": "",              "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+	{ "_label": "_scope_enum: number fails",                "_data": { "_scalar": { "_scope_enum": {} } },                                      "_value": 42,              "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+
+	{ "_label": "_scope_target: handle.property passes",    "_data": { "_scalar": { "_scope_target": {} } },                                    "_value": "terms/myterm.myfield", "_expect": "pass" },
+	{ "_label": "_scope_target: no dot fails",              "_data": { "_scalar": { "_scope_target": {} } },                                    "_value": "terms/myterm", "_expect": "fail", "_codes": ["INVALID_TARGET_SCOPE"] },
+	{ "_label": "_scope_target: invalid handle fails",      "_data": { "_scalar": { "_scope_target": {} } },                                    "_value": "123invalid/k.prop", "_expect": "fail", "_codes": ["INVALID_TARGET_SCOPE"] },
+	{ "_label": "_scope_target: empty string fails",        "_data": { "_scalar": { "_scope_target": {} } },                                    "_value": "",              "_expect": "fail", "_codes": ["WRONG_TYPE"] },
+
+	{ "_label": "multiple type keys: AMBIGUOUS_SHAPE",      "_data": { "_scalar": { "_string": {}, "_number": {} } },                          "_value": "test",          "_expect": "fail", "_codes": ["AMBIGUOUS_SHAPE"] },
+	{ "_label": "empty _scalar: any value passes",          "_data": { "_scalar": {} },                                                         "_value": "anything",      "_expect": "pass" },
+
+	{ "_label": "_handle_SVG: blob handle passes",          "_data": { "_scalar": { "_handle_SVG": {} } },                                      "_value": "blobs/339d23fc1dbffe043bc69d6db95b5912", "_expect": "pass" },
+	{ "_label": "_handle_SVG: bare word fails",             "_data": { "_scalar": { "_handle_SVG": {} } },                                      "_value": "not-a-handle",  "_expect": "fail", "_codes": ["INVALID_HANDLE"] },
+	{ "_label": "_handle_SVG: non-string fails",            "_data": { "_scalar": { "_handle_SVG": {} } },                                      "_value": 42,              "_expect": "fail", "_codes": ["INVALID_HANDLE"] }
+]

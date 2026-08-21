@@ -1,0 +1,175 @@
+[
+	{
+		"_code": {
+			"_nid": "",
+			"_lid": "TEST_schema",
+			"_gid": "_TEST_schema",
+			"_aid": ["TEST_schema"]
+		},
+		"_info": {
+			"_title": { "ISO_639_3_eng": "Test schema (rule testing)" }
+		},
+		"_data": {
+			"_object": {
+				"_open": {
+					"_recommended": ["_TEST_schema_prop_a", "_TEST_schema_prop_b"]
+				}
+			}
+		}
+	},
+	{
+		"_code": {
+			"_nid": "_TEST_schema",
+			"_lid": "prop_a",
+			"_gid": "_TEST_schema_prop_a",
+			"_aid": ["prop_a"]
+		},
+		"_info": {
+			"_title": { "ISO_639_3_eng": "Test property A" }
+		},
+		"_data": {
+			"_scalar": { "_string": {} }
+		},
+		"_domn": {
+			"_term_role": ["_term_role_descriptor"]
+		}
+	},
+	{
+		"_code": {
+			"_nid": "_TEST_schema",
+			"_lid": "prop_b",
+			"_gid": "_TEST_schema_prop_b",
+			"_aid": ["prop_b"]
+		},
+		"_info": {
+			"_title": { "ISO_639_3_eng": "Test property B" }
+		},
+		"_data": {
+			"_scalar": { "_string": {} }
+		},
+		"_domn": {
+			"_term_role": ["_term_role_descriptor"]
+		}
+	},
+	{
+		"_code": {
+			"_nid": "",
+			"_lid": "TEST_scoped_ref",
+			"_gid": "_TEST_scoped_ref",
+			"_aid": ["TEST_scoped_ref"]
+		},
+		"_info": {
+			"_title": { "ISO_639_3_eng": "Test scoped reference (body-target validation)" }
+		},
+		"_data": {
+			"_scalar": {
+				"_scope_object": {
+					"_scalar": { "_number_float": {} }
+				}
+			}
+		}
+	},
+	{
+		"_code": {
+			"_nid": "",
+			"_lid": "TEST_scoped_target",
+			"_gid": "_TEST_scoped_target",
+			"_aid": ["TEST_scoped_target"]
+		},
+		"_info": {
+			"_title": { "ISO_639_3_eng": "Test scoped target (body-target validation)" }
+		},
+		"_data": {
+			"_scalar": { "_number_float": {} }
+		},
+		"_domn": {
+			"_term_role": ["_term_role_descriptor"]
+		}
+	},
+	{
+		"_code": {
+			"_nid": "",
+			"_lid": "TEST_keyed_var",
+			"_gid": "_TEST_keyed_var",
+			"_aid": ["TEST_keyed_var"]
+		},
+		"_info": {
+			"_title": { "ISO_639_3_eng": "Test keyed variable (runtime-key validation)" }
+		},
+		"_data": {
+			"_keyed": {
+				"_TEST_schema_prop_a": { "_scalar": { "_number_float": {} } },
+				"_TEST_schema_prop_b": { "_scalar": { "_string": {} } }
+			}
+		},
+		"_domn": {
+			"_term_role": ["_term_role_descriptor"]
+		}
+	},
+	{
+		"_code": {
+			"_nid": "",
+			"_lid": "TEST_sibling_handles",
+			"_gid": "_TEST_sibling_handles",
+			"_aid": ["TEST_sibling_handles"]
+		},
+		"_info": {
+			"_title": { "ISO_639_3_eng": "Test sibling: set of handles (the _path pattern)" }
+		},
+		"_data": {
+			"_set": { "_handle": {} }
+		},
+		"_domn": {
+			"_term_role": ["_term_role_descriptor"]
+		}
+	},
+	{
+		"_code": {
+			"_nid": "",
+			"_lid": "TEST_sibling_targets",
+			"_gid": "_TEST_sibling_targets",
+			"_aid": ["TEST_sibling_targets"]
+		},
+		"_info": {
+			"_title": { "ISO_639_3_eng": "Test sibling: set of target scopes (the _target pattern)" }
+		},
+		"_data": {
+			"_set": { "_scope_target": {} }
+		},
+		"_domn": {
+			"_term_role": ["_term_role_descriptor"]
+		}
+	},
+	{
+		"_code": {
+			"_nid": "",
+			"_lid": "TEST_sibling_geo",
+			"_gid": "_TEST_sibling_geo",
+			"_aid": ["TEST_sibling_geo"]
+		},
+		"_info": {
+			"_title": { "ISO_639_3_eng": "Test sibling: GeoJSON-shaped (never a string)" }
+		},
+		"_data": {
+			"_object_GeoJSON": {}
+		},
+		"_domn": {
+			"_term_role": ["_term_role_descriptor"]
+		}
+	},
+	{
+		"_code": {
+			"_nid": "",
+			"_lid": "TEST_sibling_any",
+			"_gid": "_TEST_sibling_any",
+			"_aid": ["TEST_sibling_any"]
+		},
+		"_info": {
+			"_title": { "ISO_639_3_eng": "Test sibling: any-shape data (unknown, benefit of the doubt)" }
+		},
+		"_data": {},
+		"_domn": {
+			"_term_role": ["_term_role_descriptor"]
+		}
+	}
+]

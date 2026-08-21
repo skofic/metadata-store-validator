@@ -1,0 +1,38 @@
+{
+	"name": "metadata-store-validator",
+	"version": "1.0.0",
+	"description": "Dictionary-conformance validator for the metadata-store data dictionary: library (Node + ArangoDB Foxx), Node dbAccess adapter, and CLI.",
+	"main": "index.js",
+	"bin": {
+		"metadata-validate": "bin/validate.js"
+	},
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/skofic/metadata-store-validator.git"
+	},
+	"bugs": {
+		"url": "https://github.com/skofic/metadata-store-validator/issues"
+	},
+	"homepage": "https://github.com/skofic/metadata-store-validator#readme",
+	"files": [
+		"index.js",
+		"lib/",
+		"db/",
+		"bin/",
+		"README.md"
+	],
+	"scripts": {
+		"test": "node test/run.js",
+		"test:db": "node test/run.js --db ../metadata-store/globals/auth/db.credentials.local.json --fixtures"
+	},
+	"dependencies": {
+		"geojson-s2": "github:skofic/geojson-s2#v1.0.0"
+	},
+	"optionalDependencies": {
+		"sync-request": "^6.1.0"
+	},
+	"engines": {
+		"node": ">=18"
+	}
+}
