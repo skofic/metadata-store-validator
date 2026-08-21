@@ -19,9 +19,15 @@ const compute  = require('./lib/compute');
 const errors   = require('./lib/errors');
 const { ANCHOR } = require('./lib/type-registry');
 
-module.exports = Object.assign({}, lib, {
-	compute,
-	errors,
-	ANCHOR,
-	get makeDbAccess() { return require('./db/db-access'); },
+const api = Object.assign({}, lib, { compute, errors, ANCHOR });
+
+// Lazy: `db/db-access.js` pulls in the optional `sync-request` dependency, which
+// Foxx bundles omit. A getter on the exports object keeps it out of the load
+// path until a caller actually asks for it. (Not via Object.assign — that
+// would read the getter eagerly.)
+Object.defineProperty(api, 'makeDbAccess', {
+	enumerable: true,
+	get() { return require('./db/db-access'); },
 });
+
+module.exports = api;

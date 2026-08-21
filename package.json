@@ -1,6 +1,6 @@
 {
 	"name": "metadata-store-validator",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Dictionary-conformance validator for the metadata-store data dictionary: library (Node + ArangoDB Foxx), Node dbAccess adapter, and CLI.",
 	"main": "index.js",
 	"bin": {
