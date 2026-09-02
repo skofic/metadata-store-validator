@@ -74,6 +74,10 @@ It depends on [`geojson-s2`](https://github.com/skofic/geojson-s2) (pinned the s
 metadata-validate --compute --credentials path/to/db.credentials.json path/to/data/ --errors-only
 ```
 
+Add `--exclude <path>` (repeatable) for directories that exist in the tree but
+are not loaded into the database — their cross-references would otherwise fail
+against a dictionary that does not contain them.
+
 Run without arguments for the full option list; `MILKO.md` documents the flags, modes, pre-validation transforms and output format.
 
 ---

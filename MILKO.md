@@ -232,6 +232,25 @@ node bin/validate.js --terms-col myterms --edges-col myedges --credentials … .
 | `--links-col <n>` | `links` |
 | `--blobs-col <n>` | `blobs` |
 
+### Skipping part of the tree
+
+| Flag | Purpose |
+|------|---------|
+| `--exclude <path>` | Skip a file, or everything under a directory. Repeatable. |
+
+The validator checks documents against the **loaded** dictionary, so a
+directory that exists in the working tree but is *not* loaded will fail on its
+own internal cross-references — the referenced terms are simply not in the
+database. `--exclude` is how you keep the two in step:
+
+```sh
+node bin/validate.js --compute --credentials … ../metadata-store/data/ \
+  --exclude ../metadata-store/data/examples --errors-only
+```
+
+Matching is on the resolved absolute path and respects path boundaries, so
+excluding `data/examples` does not also exclude `data/examples-extra`.
+
 ---
 
 ## Validation modes

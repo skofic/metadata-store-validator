@@ -40,6 +40,10 @@
  *   --edges-col <n>      Edges collection name (default: edges)
  *   --links-col <n>      Links collection name (default: links)
  *   --blobs-col <n>      Blobs collection name (default: blobs)
+ *   --exclude <path>     Skip a file or directory under <path>; repeatable.
+ *                        For directories that exist in the working tree but are
+ *                        not loaded into the database (their cross-references
+ *                        would otherwise fail against a dictionary lacking them).
  */
 
 const fs   = require('fs');
@@ -137,8 +141,19 @@ function detectMode(filename) {
 	return null;
 }
 
-// Collect all .json files under a path (recursive for directories)
-function collectJsonFiles(target) {
+// Collect all .json files under a path (recursive for directories),
+// skipping anything inside an excluded path.
+//
+// `excluded` holds resolved absolute paths — a directory (everything under it
+// is skipped) or a single file. The usual reason to exclude is that a
+// directory is present in the working tree but is NOT loaded into the
+// database: its terms would then be validated against a dictionary that does
+// not contain them, and every internal cross-reference would fail. Validate
+// what you load.
+function collectJsonFiles(target, excluded) {
+	const skip = excluded || [];
+	if (skip.some(function(x) { return target === x || target.startsWith(x + path.sep); })) return [];
+
 	const stat = fs.statSync(target);
 	if (stat.isFile()) {
 		return target.endsWith('.json') ? [target] : [];
@@ -146,8 +161,8 @@ function collectJsonFiles(target) {
 	return fs.readdirSync(target, { withFileTypes: true })
 		.flatMap(function(entry) {
 			const full = path.join(target, entry.name);
-			if (entry.isDirectory())         return collectJsonFiles(full);
-			if (entry.name.endsWith('.json')) return [full];
+			if (entry.isDirectory())         return collectJsonFiles(full, skip);
+			if (entry.name.endsWith('.json')) return collectJsonFiles(full, skip);
 			return [];
 		});
 }
@@ -274,6 +289,7 @@ function parseArgs(argv) {
 		edgesCol:       null,
 		linksCol:       null,
 		blobsCol:       null,
+		exclude:        [],
 		target:         null,
 	};
 	let i = 2;
@@ -297,6 +313,7 @@ function parseArgs(argv) {
 		case '--edges-col':       args.edgesCol       = argv[++i]; break;
 		case '--links-col':       args.linksCol       = argv[++i]; break;
 		case '--blobs-col':       args.blobsCol       = argv[++i]; break;
+		case '--exclude':         args.exclude.push(argv[++i]);   break;
 		default:
 			if (!argv[i].startsWith('--')) args.target = argv[i];
 		}
@@ -374,6 +391,9 @@ function usage() {
 		'  --edges-col <n>         Edges collection name (default: edges)',
 		'  --links-col <n>         Links collection name (default: links)',
 		'  --blobs-col <n>         Blobs collection name (default: blobs)',
+		'  --exclude <path>        Skip a file or directory under <path> (repeatable).',
+		'                          Use it for directories present in the tree but not',
+		'                          loaded into the database.',
 		'',
 		'Examples:',
 		'  node index.js ../../data/core/',
@@ -450,7 +470,8 @@ function main() {
 
 	checkAnchorRoles(dbAccess);
 
-	const files    = collectJsonFiles(path.resolve(args.target));
+	const excluded = args.exclude.map(function(p) { return path.resolve(p); });
+	const files    = collectJsonFiles(path.resolve(args.target), excluded);
 
 	if (files.length === 0) {
 		console.error('No JSON files found at: ' + args.target);
