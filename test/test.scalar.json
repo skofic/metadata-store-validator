@@ -80,7 +80,7 @@
 	{ "_label": "_text_Markdown: string passes",            "_data": { "_scalar": { "_text_Markdown": {} } },                                   "_value": "**bold**",      "_expect": "pass" },
 
 	{ "_label": "_scope_enum: plain root string passes",    "_data": { "_scalar": { "_scope_enum": {} } },                                      "_value": "ISO_639_3",     "_expect": "pass" },
-	{ "_label": "_scope_enum: compound root.node passes",   "_data": { "_scalar": { "_scope_enum": {} } },                                      "_value": "ISO_639_3.eng", "_expect": "pass" },
+	{ "_label": "_scope_enum: compound root.node passes",   "_data": { "_scalar": { "_scope_enum": {} } },                                      "_value": "ISO_639_3.ISO_639_3_eng", "_expect": "pass" },
 	{ "_label": "_scope_enum: empty string fails",          "_data": { "_scalar": { "_scope_enum": {} } },                                      "_value": "",              "_expect": "fail", "_codes": ["WRONG_TYPE"] },
 	{ "_label": "_scope_enum: number fails",                "_data": { "_scalar": { "_scope_enum": {} } },                                      "_value": 42,              "_expect": "fail", "_codes": ["WRONG_TYPE"] },
 

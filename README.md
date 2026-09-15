@@ -47,7 +47,7 @@ test/               — regression suite (see MILKO.md)
 Distributed as a **GitHub-tagged npm dependency** (no registry publish). Pin a tag:
 
 ```json
-{ "dependencies": { "metadata-store-validator": "github:skofic/metadata-store-validator#v1.1.0" } }
+{ "dependencies": { "metadata-store-validator": "github:skofic/metadata-store-validator#v1.1.1" } }
 ```
 
 ```js
@@ -260,6 +260,136 @@ const dbAccess = makeSnapshotDbAccess(snapshot);   // synchronous, no network
 The snapshot is plain JSON (version 1: `terms`, `missing`, `enumEdges`, `propertyOfRules`, `valueOfRules`, `source`, `builtAt`), so a run can store it as the record of the dictionary its data was checked against. `makeSnapshotDbAccess` refuses a snapshot without the anchor terms, and a lookup for a gid never requested **throws** — pass `{ onMiss: 'null' }` to treat such gids as absent instead. `isEnumRoot` for roots outside the snapshot's enumerations falls back to a term lookup and throws likewise; data descriptors do not use it.
 
 The snapshot accessor and the live adapter share their edge logic (`lib/edge-index.js`), so they validate identically (`test/snapshot-parity.js` checks it against a live database).
+
+---
+
+## Using it in a data pipeline
+
+A guide for a loader that writes documents whose values are described by dictionary descriptors, such as a pipeline filling a geospatial database with remote-sensing indicators. The library checks values and reports; what to do with an invalid value (stop, leave it out, or store it and count it) is the pipeline's decision.
+
+### 1. Install
+
+Pin a tag and skip the optional dependency (only the live adapter and the CLI need it):
+
+```sh
+npm install --omit=optional github:skofic/metadata-store-validator#v1.1.1
+```
+
+From an ES module, load it with `createRequire` (named imports do not work):
+
+```js
+import { createRequire } from 'node:module'
+const validator = createRequire(import.meta.url)('metadata-store-validator')
+```
+
+### 2. Load the dictionary once per run
+
+Build a snapshot for the descriptors the run can write, from the `metadata` database. Any AQL client works; with arangojs:
+
+```js
+import { Database } from 'arangojs'
+
+const dictionaryDb = new Database({ url: host, databaseName: 'metadata', auth: { username, password } })
+const snapshot = await validator.buildSnapshot({
+  gids,                                                     // every descriptor gid the run may write
+  query: (aql, bindVars) => dictionaryDb.query(aql, bindVars).then((cursor) => cursor.all()),
+})
+if (snapshot.missing.length) throw new Error(`not in the dictionary: ${snapshot.missing.join(', ')}`)
+
+const dictionary = validator.makeSnapshotDbAccess(snapshot)
+```
+
+- The user needs read access to `metadata`; the snapshot is fetched in a handful of queries, and nothing is read from the database afterwards.
+- A gid that was not requested **throws** when looked up — right where a gid outside the run's list is a bug. Where stray gids can legitimately appear (checking data already stored), pass `{ onMiss: 'null' }`: an unknown gid is then reported as `UNKNOWN_PROPERTY`.
+- The snapshot is plain JSON. Saving it with the run's log records which dictionary the data was checked against.
+
+### 3. Check values as records are built
+
+A record keyed by descriptor gid:
+
+```js
+const report = validator.createReport()
+
+const result = validator.validateProperties(record.properties, dictionary)
+report.add(result, { properties: record.properties })
+if (result.errors.length) {
+  // stop, drop, or keep — the pipeline's policy. Warnings never make a value invalid.
+}
+```
+
+When values are nested under keys that are not gids (periods, models, scenarios, …), walk to the leaves and check each value against its descriptor:
+
+```js
+const result = validator.validateByDictionary(value, gid, dictionary)
+report.add(result, { gid })
+```
+
+Each finding has `code`, `path` (starting with the gid), `value`, `expected` and `message`. On localhost (Apple M1 Max) `validateProperties` plus `report.add` took 2–3 µs for a record of five properties; measure on the target machine before choosing to sample.
+
+### 4. Print the report at the end of the run
+
+```js
+console.log(report.format())
+```
+
+It lists errors and warnings per descriptor and code, with the share of the values checked. The report sets no threshold: a high share of `RANGE_OUTLIER` warnings on one descriptor is the signal to look at the data (or at that descriptor's normal range).
+
+### 5. Check what is stored
+
+For collections too large to read back, aggregate per descriptor in the database and validate the aggregates. Start from what the dictionary says about each gid:
+
+```js
+const needs = validator.describeEnvelopeNeeds(gids, dictionary)
+// needs[gid] = { found, kind, type, unit, ranges: { valid, normal, unit } }
+```
+
+For documents whose `properties` is a flat object keyed by gid, one query gathers the basics:
+
+```js
+const rows = await dataDb.query(`
+  FOR d IN @@collection
+    FOR gid IN ATTRIBUTES(d.properties)
+      LET x = d.properties[gid]
+      COLLECT g = gid AGGREGATE
+        count      = COUNT(1),
+        min        = MIN(IS_NUMBER(x) ? x : null),
+        max        = MAX(IS_NUMBER(x) ? x : null),
+        types      = UNIQUE(TYPENAME(x)),
+        nonInteger = SUM(IS_NUMBER(x) && x != FLOOR(x) ? 1 : 0)
+      RETURN { gid: g, count, min, max, types, nonInteger }`,
+  { '@collection': name }).then((cursor) => cursor.all())
+
+const envelope = Object.fromEntries(rows.map(({ gid, ...aggregates }) => [gid, aggregates]))
+```
+
+The extremes show *whether* a range is breached. To know *how many* values are outside, count them for the gids whose extremes breach a range, with a condition built from `needs[gid].ranges`: `outOfValid` counts values outside the valid range or the unit bound, `outOfNormal` values outside the normal range.
+
+```js
+// "x is outside this _range object", as an AQL condition; null when there is no range
+function outside(range, x = 'x') {
+  if (!range) return null
+  const parts = []
+  if (range['_min-inclusive'] != null) parts.push(`${x} < ${range['_min-inclusive']}`)
+  if (range['_min-exclusive'] != null) parts.push(`${x} <= ${range['_min-exclusive']}`)
+  if (range['_max-inclusive'] != null) parts.push(`${x} > ${range['_max-inclusive']}`)
+  if (range['_max-exclusive'] != null) parts.push(`${x} >= ${range['_max-exclusive']}`)
+  return parts.length ? parts.join(' OR ') : null
+}
+```
+
+For enumeration and string descriptors, collect the distinct values with their counts (capped, setting `distinctTruncated` when the cap is reached). Then:
+
+```js
+const result = validator.validateEnvelope(envelope, dictionary)
+report.addEnvelope(result, envelope)
+console.log(report.format())
+```
+
+`result.skipped` lists descriptors an envelope cannot check (object-shaped values) — check those in step 3. Aggregating a whole collection can be long; try it on a sample (`LIMIT`) first.
+
+### 6. Tests without a database
+
+`makeSnapshotDbAccess` accepts any object of the snapshot's shape, so tests can use a small hand-written snapshot instead of a database. `test/fixtures/snapshot.test.json` in this repository is a working example: the three anchor terms, a few unit terms, test descriptors, enumeration edges and one rule edge.
 
 ---
 
