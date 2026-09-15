@@ -83,4 +83,43 @@ function termLookupQuery(termsCol, gid) {
 	};
 }
 
-module.exports = { enumEdgesQuery, propertyOfRulesQuery, valueOfRulesQuery, termLookupQuery };
+/**
+ * Fetch several terms by _key in one round trip (snapshot builder).
+ * Keys with no document are simply absent from the result.
+ *
+ * Index hint: primary index on terms._key.
+ */
+function termsByKeysQuery(termsCol, keys) {
+	return {
+		query: 'FOR t IN @@col FILTER t._key IN @keys RETURN t',
+		bindVars: { '@col': termsCol, keys: keys },
+	};
+}
+
+/**
+ * Fetch the enum-of, bridge-of and section-of edges belonging to the graphs of
+ * the given roots — an edge belongs to a graph when the root's handle is in its
+ * _path (the same membership test the in-memory maps apply). Snapshot builder.
+ *
+ * Index hint: persistent index on edges._predicate; the _path test is a scan
+ * over those, which is cheap at dictionary scale.
+ */
+function enumEdgesForRootsQuery(edgesCol, rootHandles) {
+	return {
+		query:
+			'FOR e IN @@edges' +
+			'  FILTER e._predicate IN ["_predicate_enum-of", "_predicate_bridge-of", "_predicate_section-of"]' +
+			'  FILTER LENGTH(INTERSECTION(e._path, @roots)) > 0' +
+			'  RETURN { f: e._from, t: e._to, p: e._path, pred: e._predicate }',
+		bindVars: { '@edges': edgesCol, roots: rootHandles },
+	};
+}
+
+module.exports = {
+	enumEdgesQuery,
+	propertyOfRulesQuery,
+	valueOfRulesQuery,
+	termLookupQuery,
+	termsByKeysQuery,
+	enumEdgesForRootsQuery,
+};

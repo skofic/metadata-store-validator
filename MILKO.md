@@ -7,18 +7,27 @@ Dictionary-conformance validator for the metadata-store data dictionary: the **l
 Authored inside `metadata-store` as three directories — `validator/` (library), `workflows/validate/` (db adapter + CLI), `test/` (suite) — and moved here as a plain copy on 2026-08-21 (history up to `metadata-store@cf4453e` stays in that repository). `metadata-store` now consumes this package: its `workflows/validate/` is a thin wrapper that installs the pinned tag and forwards to `bin/validate.js`.
 
 ```
-index.js             package entry (re-exports lib/ + compute, errors, ANCHOR; makeDbAccess lazily)
+index.js             package entry (re-exports lib/ + compute, errors, ANCHOR; makeDbAccess,
+                     buildSnapshot, makeHttpQuery lazily)
 lib/                 validator library — see README "Directory structure"
   md5.js             the one Node/Foxx seam: `crypto` in Node, `@arangodb/crypto` in Foxx
+  edge-index.js      enumeration + rule-edge lookups over pre-loaded rows (shared by both adapters)
+  snapshot.js        makeSnapshotDbAccess(snapshot) — dbAccess over a pre-fetched snapshot
+  properties.js      validateProperties — a data record keyed by descriptor _gid
+  envelope.js        describeEnvelopeNeeds / validateEnvelope — aggregates of large data
+  report.js          createReport — errors and warnings tallied per descriptor
+  units.js           unit_range lookups + checkUnitBounds
 db/
   db-access.js       makeDbAccess(credentials, cacheSize) — synchronous ArangoDB accessor, LRU cache
+  snapshot-builder.js buildSnapshot({ gids, query }) — async; any AQL client
+  http-query.js      makeHttpQuery(credentials) — fetch-based AQL query function
   lru-cache.js       Map-backed LRU
-  queries/index.js   the AQL the adapter runs (pre-loads + term lookup)
+  queries/index.js   the AQL the adapters run (pre-loads, term lookups, snapshot queries)
 bin/validate.js      CLI
 test/                run.js + test.*.json + fixtures/
 ```
 
-Dependencies: `geojson-s2` (GitHub tag, required — `_object_GeoJSON`), `sync-request` (**optional** — only `db/` and `bin/` and `test/` need it; Foxx consumers install with `--omit=optional`).
+Dependencies: `geojson-s2` (GitHub tag, required — `_object_GeoJSON`), `sync-request` (**optional** — only the live adapter `db/db-access.js`, `bin/` and `test/` need it; Foxx consumers and snapshot-based pipelines install with `--omit=optional`).
 
 ## Consumers and release procedure
 
@@ -28,14 +37,22 @@ Distributed as a **GitHub-tagged npm dependency**; no registry publish.
 |---|---|
 | `metadata-store` (`workflows/validate/`) | `"metadata-store-validator": "github:skofic/metadata-store-validator#vX.Y.Z"`; thin `index.js` wrapper supplies the repo's default credentials path |
 | `metadata-store-service` (Foxx, `/validate` routes) | same pin in the service's `package.json`; `npm install --omit=optional`; a Foxx `dbAccess` built on `@arangodb` |
+| `metadata-external-databases` (data pipeline, ESM) | pin + `npm ci --omit=optional`; `createRequire`; a snapshot built once per run (`buildSnapshot` + arangojs), `validateProperties` at the record builders, `validateEnvelope` in the verify scripts, `createReport` printed at the end. Integration handed over in that repository's `notes/2026-09-15-dictionary-validator-handoff.md` |
 
 Release:
 
-1. Run the suite — `npm test` (no DB) and `npm run test:db` (needs a localhost `metadata` database loaded from `metadata-store`, see below) — then the heaviest check: the full-repository sweep from a `metadata-store` checkout, `node bin/validate.js --compute --credentials ../metadata-store/globals/auth/db.credentials.local.json ../metadata-store/data/ --errors-only` → every document must pass.
+1. Run the suite — `npm test` (no DB: JSON cases, snapshot tests, ESM import) and `npm run test:db` (needs a localhost `metadata` database loaded from `metadata-store`, see below; adds the snapshot-parity check) — then the heaviest check: the full-repository sweep from a `metadata-store` checkout, `node bin/validate.js --compute --credentials ../metadata-store/globals/auth/db.credentials.local.json ../metadata-store/data/ --exclude ../metadata-store/data/examples --errors-only` → every document must pass (term mode includes the unit-bound conflict check).
 2. Bump `version` in `package.json`, commit, `git tag vX.Y.Z`, `git push && git push --tags`.
 3. Bump the pin in each consumer; re-run its tests. If `geojson-s2` moved, bump its pin here first.
 
 Semver intent: a new error code or a stricter check is **minor**; a change to the public API or the `dbAccess` contract is **major**; fixes are **patch**.
+
+### Releases
+
+- **v1.1.0** (2026-09-15) — **Outliers are warnings**: `RANGE_OUTLIER` (`_range_normal`) moves from `errors` to `warnings` in every entry point; only `_range_valid` and unit bounds make a value invalid (a consumer counting failed documents will see fewer). **`unit_range` enforced** on numeric values (`RANGE_VIOLATION` naming the unit), and `checkUnitBounds` / `UNIT_RANGE_CONFLICT` for descriptors whose declared range contradicts their unit (run by the CLI in term mode). **Bulk data**: `makeSnapshotDbAccess` + `buildSnapshot` + `makeHttpQuery`, `validateProperties`, `describeEnvelopeNeeds` / `validateEnvelope`, `createReport`, CLI `--summary`. `validateValue` / `validateDocument` return `warnings`; `validateFile` adds `warned` and `warnings`. Fixed: `validateDocument` / `validateFile` threw because they read `computeTermCode`'s `{ errors, warnings }` result as an array. The live adapter's edge logic moved to `lib/edge-index.js` (behaviour unchanged, shared with the snapshot).
+- **v1.0.2** (2026-09-02) — CLI `--exclude <path>`.
+- **v1.0.1** (2026-08-21) — `makeDbAccess` export made lazy (Foxx load path).
+- **v1.0.0** (2026-08-21) — extracted from `metadata-store`.
 
 **Keep the library pure.** Nothing under `lib/` may `require` a Node built-in except through `lib/md5.js`; nothing there may touch the network or the file system. Everything DB-shaped goes through the `dbAccess` seam so the same code runs under Foxx.
 
@@ -280,6 +297,7 @@ Use `--strict` / `--lenient` to override the `UNKNOWN_PROPERTY` treatment indepe
 |------|--------|
 | `--quiet` | Suppress per-file headers for files that pass; show only files with problems |
 | `--errors-only` | Suppress all warnings; show only errors |
+| `--summary` | Do not print each warning; at the end print errors and warnings per descriptor and code with the share of values checked (`createReport`). For dataset files validated with `--mode strict|lenient`, each document's keys count as values |
 
 ---
 
@@ -287,10 +305,12 @@ Use `--strict` / `--lenient` to override the `UNKNOWN_PROPERTY` treatment indepe
 
 1. Validate the **entire document** (all properties, all nesting levels) before deciding.
 2. If the document has at least one **error** → report all errors (and warnings unless `--errors-only`), then exit 1.
-3. If the document has only **warnings** → report them (unless `--errors-only`), continue to the next document.
+3. If the document has only **warnings** → report them (unless `--errors-only` or `--summary`), continue to the next document. Warnings never stop a run: a value outside `_range_normal` is a `RANGE_OUTLIER` warning, not an error.
 4. If the document passes → move to the next document.
 
 This gives the full picture of what is wrong with the failing document before stopping.
+
+In **term mode** each document is also checked with `checkUnitBounds`: a descriptor whose `_range_valid` or `_range_normal` reaches beyond its unit's physical bound (`unit_range`) fails with `UNIT_RANGE_CONFLICT`.
 
 ---
 
@@ -331,8 +351,9 @@ All error codes are defined in `lib/errors.js`:
 | `MISSING_REQUIRED` | Required property is absent |
 | `BANNED_PROPERTY` | Banned property is present |
 | `SELECTION_VIOLATION` | `_required` selector count not satisfied |
-| `RANGE_VIOLATION` | Value outside `_range_valid` (hard error) |
-| `RANGE_OUTLIER` | Value outside `_range_normal` (warning) |
+| `RANGE_VIOLATION` | Value outside `_range_valid`, or outside its unit's physical bound (hard error) |
+| `RANGE_OUTLIER` | Value outside `_range_normal` (**warning**) |
+| `UNIT_RANGE_CONFLICT` | Descriptor's declared range reaches beyond its unit's physical bound (term mode) |
 | `REGEXP_MISMATCH` | String does not match `_regexp` constraint |
 | `CASE_MISMATCH` | String letter case violates the `_case` constraint |
 | `LENGTH_VIOLATION` | String length outside the `_length` bounds |
@@ -389,6 +410,11 @@ test/
   test.array.json      Array, set, dict, tuple tests — no DB required
   test.geojson.json    _object_GeoJSON (delegates to geojson-s2)
   test.rules.json      Rule-edge tests — DB required, uses fixtures
+  test.units.json      Unit physical bounds — snapshot cases (no DB) + live-dictionary cases
+  fixtures/snapshot.test.json   Hand-built dictionary snapshot (anchor + unit terms copied from metadata-store)
+  snapshot.test.js     Snapshot dbAccess contract, validateProperties, envelope, report, checkUnitBounds (no DB)
+  esm-import.test.mjs  The package loads from an ES module (createRequire / default import)
+  snapshot-parity.js   Snapshot vs live adapter give identical results (DB; part of test:db)
 ```
 
 The DB-backed cases need a localhost `metadata` database loaded by `metadata-store`'s loader (they reference real dictionary terms and the `_TEST_*` fixtures). One failure is **expected and carried**: `_scope_enum: compound root.node passes` in `test.scalar.json` (since metadata-store Session 31; the canonical leaf is `ISO_639_3_eng`, not the bare `eng`).
@@ -465,6 +491,8 @@ Each test file is a flat JSON array. Every element is one test case:
 | `_codes` | No | When `_expect: "fail"`: error codes that must all appear in the result |
 | `_db` | No | `true` = skip this case when no DB credentials are provided |
 | `_conformance` | No | `true` = route through `validateConformance`/`validateByDictionary`, which applies rule edges |
+| `_warnings` | No | Warning codes that must all appear in `result.warnings`; `[]` = no warning at all. Warnings never decide `_expect` |
+| `_snapshot` | No | `true` = run against the dbAccess built from `fixtures/snapshot.test.json` (no DB needed) |
 
 \* Exactly one of `_data` or `_descriptor` must be present.
 

@@ -44,6 +44,12 @@
  *                        For directories that exist in the working tree but are
  *                        not loaded into the database (their cross-references
  *                        would otherwise fail against a dictionary lacking them).
+ *   --summary            Do not print each warning; at the end print counts of
+ *                        errors and warnings per descriptor and code, with the
+ *                        share of values checked (for large data files).
+ *
+ * In term mode every descriptor is also checked for a declared range that
+ * reaches beyond its unit's physical bound (UNIT_RANGE_CONFLICT).
  */
 
 const fs   = require('fs');
@@ -79,7 +85,7 @@ function checkAnchorRoles(dbAccess) {
 			'_term_role_authority so they are protected from deletion.');
 	}
 }
-const { validateByDictionary } = require('../lib');
+const { validateByDictionary, checkUnitBounds, createReport } = require('../lib');
 const { computeTermCode, computeEdgeKey, computeBlobKey } = require('../lib/compute');
 
 // Load a credentials file, following a one-hop `use` pointer if present.
@@ -285,6 +291,7 @@ function parseArgs(argv) {
 		resolveHandles: false,
 		quiet:          false,
 		errorsOnly:     false,
+		summary:        false,
 		termsCol:       null,
 		edgesCol:       null,
 		linksCol:       null,
@@ -309,6 +316,7 @@ function parseArgs(argv) {
 		case '--resolve-handles': args.resolveHandles = true;      break;
 		case '--quiet':           args.quiet          = true;      break;
 		case '--errors-only':     args.errorsOnly     = true;      break;
+		case '--summary':         args.summary        = true;      break;
 		case '--terms-col':       args.termsCol       = argv[++i]; break;
 		case '--edges-col':       args.edgesCol       = argv[++i]; break;
 		case '--links-col':       args.linksCol       = argv[++i]; break;
@@ -394,6 +402,8 @@ function usage() {
 		'  --exclude <path>        Skip a file or directory under <path> (repeatable).',
 		'                          Use it for directories present in the tree but not',
 		'                          loaded into the database.',
+		'  --summary               Instead of each warning, print at the end the errors and',
+		'                          warnings per descriptor and code, with the share of values.',
 		'',
 		'Examples:',
 		'  node index.js ../../data/core/',
@@ -481,6 +491,14 @@ function main() {
 	let totalDocs   = 0;
 	let totalPassed = 0;
 	let totalWarn   = 0;
+
+	// --summary: tally findings across the whole run, printed once at the end.
+	const report = args.summary ? createReport() : null;
+	function printSummary() {
+		if (!report) return;
+		console.log('');
+		console.log(report.format());
+	}
 
 	for (const file of files) {
 		let docs;
@@ -583,22 +601,35 @@ function main() {
 			if (computeResult.warnings.length > 0)
 				result.warnings = computeResult.warnings.concat(result.warnings);
 
+			// A descriptor must not declare a range its unit's physical bound forbids.
+			if (mode === 'term' && doc._data) {
+				const conflicts = checkUnitBounds(doc, dbAccess);
+				if (conflicts.length > 0) result.errors = result.errors.concat(conflicts);
+			}
+
+			if (report) {
+				report.add(result, (mode === 'strict' || mode === 'lenient') ? { properties: doc } : undefined);
+			}
+
 			const hasErrors   = result.errors.length > 0;
 			const hasWarnings = result.warnings.length > 0;
+			const showWarn    = hasWarnings && !args.errorsOnly && !args.summary;
 
 			// Build path→line map lazily — only when there is something to report
-			const needMap = hasErrors || (hasWarnings && !args.errorsOnly);
+			const needMap = hasErrors || showWarn;
 			let pathMap = null;
 			if (needMap && docEntry) {
 				pathMap = buildPathLineMap(raw, docEntry.offset, docEntry.fileLine);
 			}
 
-			if (hasWarnings && !hasErrors && !args.errorsOnly) {
+			if (hasWarnings && !hasErrors) {
 				totalWarn++;
-				printFileHeader();
-				console.warn('  ' + docRef + ' WARN  ' + gid);
-				for (const w of result.warnings) {
-					console.warn(fmtItem(w, 'WARN', pathMap));
+				if (showWarn) {
+					printFileHeader();
+					console.warn('  ' + docRef + ' WARN  ' + gid);
+					for (const w of result.warnings) {
+						console.warn(fmtItem(w, 'WARN', pathMap));
+					}
 				}
 			}
 
@@ -608,7 +639,7 @@ function main() {
 				for (const e of result.errors) {
 					console.error(fmtItem(e, 'ERR ', pathMap));
 				}
-				if (hasWarnings && !args.errorsOnly) {
+				if (showWarn) {
 					for (const w of result.warnings) {
 						console.warn(fmtItem(w, 'WARN', pathMap));
 					}
@@ -618,6 +649,7 @@ function main() {
 				console.error('  Passed: ' + totalPassed +
 				              '  Warned: ' + totalWarn +
 				              '  Validated: ' + totalDocs);
+				printSummary();
 				process.exit(1);
 			}
 
@@ -632,6 +664,7 @@ function main() {
 	console.log('  Passed: ' + totalPassed +
 	            '  Warned: ' + totalWarn +
 	            '  Total:  ' + totalDocs);
+	printSummary();
 }
 
 main();

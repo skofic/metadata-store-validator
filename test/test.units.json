@@ -1,0 +1,16 @@
+[
+	{ "_label": "unit bound: kelvin below 0 is a RANGE_VIOLATION", "_descriptor": "_TEST_temp_K", "_value": -1, "_expect": "fail", "_codes": ["RANGE_VIOLATION"], "_snapshot": true, "_conformance": true },
+	{ "_label": "unit bound: kelvin 0 is valid, and an outlier (warning)", "_descriptor": "_TEST_temp_K", "_value": 0, "_expect": "pass", "_warnings": ["RANGE_OUTLIER"], "_snapshot": true, "_conformance": true },
+	{ "_label": "unit bound: kelvin inside the normal range, no warning", "_descriptor": "_TEST_temp_K", "_value": 300, "_expect": "pass", "_warnings": [], "_snapshot": true, "_conformance": true },
+	{ "_label": "unit bound narrows the descriptor: percent 120 fails although _range_valid allows 150", "_descriptor": "_TEST_pct", "_value": 120, "_expect": "fail", "_codes": ["RANGE_VIOLATION"], "_snapshot": true, "_conformance": true },
+	{ "_label": "unit bound: percent 50 passes", "_descriptor": "_TEST_pct", "_value": 50, "_expect": "pass", "_snapshot": true, "_conformance": true },
+	{ "_label": "unit without a physical bound: only _range_valid applies", "_descriptor": "_TEST_angle", "_value": 400, "_expect": "fail", "_codes": ["RANGE_VIOLATION"], "_snapshot": true, "_conformance": true },
+	{ "_label": "unit without a physical bound: in range passes", "_descriptor": "_TEST_angle", "_value": 350, "_expect": "pass", "_snapshot": true, "_conformance": true },
+	{ "_label": "unit term not found (or no dbAccess): no bound to apply, nothing is reported", "_data": { "_scalar": { "_number_float": { "_unit": "_TEST_unit_not_in_dictionary" } } }, "_value": -5, "_expect": "pass" },
+	{ "_label": "snapshot enum: member through a section passes", "_descriptor": "_TEST_color", "_value": "_TEST_colors_orange", "_expect": "pass", "_snapshot": true, "_conformance": true },
+	{ "_label": "snapshot enum: a section is not a member", "_descriptor": "_TEST_color", "_value": "_TEST_colors_warm", "_expect": "fail", "_codes": ["INVALID_ENUM"], "_snapshot": true, "_conformance": true },
+	{ "_label": "snapshot rule edge: a property-of rule bans a sibling", "_descriptor": "_TEST_record", "_value": { "_TEST_color": "_TEST_colors_red", "_TEST_label": "x" }, "_expect": "fail", "_codes": ["BANNED_PROPERTY"], "_snapshot": true, "_conformance": true },
+	{ "_label": "live dictionary: °C bound rejects -300 on env_climate_bio01", "_descriptor": "env_climate_bio01", "_value": -300, "_expect": "fail", "_codes": ["RANGE_VIOLATION"], "_db": true, "_conformance": true },
+	{ "_label": "live dictionary: percent bound rejects 120 on env_climate_hurs_mean", "_descriptor": "env_climate_hurs_mean", "_value": 120, "_expect": "fail", "_codes": ["RANGE_VIOLATION"], "_db": true, "_conformance": true },
+	{ "_label": "live dictionary: negative water potential is valid on chr_P50 (pressure units carry no bound)", "_descriptor": "chr_P50", "_value": -3.5, "_expect": "pass", "_db": true, "_conformance": true }
+]

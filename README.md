@@ -1,6 +1,6 @@
 # metadata-store-validator
 
-JavaScript validation library for the [metadata-store](https://github.com/skofic/metadata-store) data dictionary, plus a Node `dbAccess` adapter and a CLI.
+JavaScript validation library for the [metadata-store](https://github.com/skofic/metadata-store) data dictionary, plus a Node `dbAccess` adapter, a dictionary snapshot for bulk data, and a CLI.
 
 Validates values and documents against `_data` section schemas defined in the dictionary. The library runs synchronously in `'use strict'` mode, has no Node built-ins on its hot path, and runs unchanged in Node and in ArangoDB Foxx services. The dictionary's own vocabularies (`_type_shape`, `_type_scalar`, `_type_key`) are read from the database at runtime — the only things fixed in code are those three anchor GIDs.
 
@@ -11,42 +11,33 @@ Authored inside `metadata-store` (as `validator/`, `workflows/validate/` and `te
 ## Directory structure
 
 ```
-index.js            — package entry: re-exports lib/ + compute, errors, ANCHOR, makeDbAccess (lazy)
+index.js            — package entry: re-exports lib/ + compute, errors, ANCHOR;
+                      makeDbAccess, buildSnapshot, makeHttpQuery (lazy)
 lib/                — the validator library (pure; Node + Foxx)
-  index.js          — public API (five entry points)
+  index.js          — public API
   validate.js       — shape dispatcher (validateData)
   conformance.js    — dictionary-driven validator (validateByDictionary, validateConformance)
+  properties.js     — validateProperties: a data record keyed by descriptor _gid
+  envelope.js       — describeEnvelopeNeeds / validateEnvelope: aggregates of large data
+  report.js         — createReport: errors and warnings tallied per descriptor
+  snapshot.js       — makeSnapshotDbAccess: dbAccess over a pre-fetched dictionary snapshot
+  edge-index.js     — enumeration and rule-edge lookups shared by both Node adapters
+  units.js          — unit physical bounds (unit_range) and checkUnitBounds
   compute.js        — resolve computed properties (_key, _gid, _aid) for terms, edges, and blobs
   md5.js            — MD5 shim: Node `crypto`, or `@arangodb/crypto` under Foxx
   coerce.js         — type coercion before strict validation
-  errors.js         — error codes and makeError() builder
+  errors.js         — error codes, makeError(), WARNING_CODES, partitionFindings()
   ranges.js         — shared numeric and string range checks
   type-registry.js  — reads the type vocabularies from the three anchor terms
-  types/
-    number.js       — _number, _number_float, _number_integer
-    boolean.js      — _boolean
-    string.js       — _string and all _string_* variants
-    text.js         — _text, _text_HTML, _text_Markdown, _text_SVG
-    other.js        — _handle, _timestamp
-    enum.js         — _enum (requires dbAccess)
-    term-key.js     — _term_key and _term_key_* variants (requires dbAccess)
-  shapes/
-    scalar.js       — _scalar dispatcher + coercion
-    object.js       — _object (open/closed schemas, selectors)
-    geojson.js      — _object_GeoJSON (top-level shape; RFC 7946 geometry, _type_GeoJSON narrowing)
-    objects.js      — _objects (positional slot schemas + _unique / _ordered invariants)
-    array.js        — _array
-    set.js          — _set (unique elements)
-    dict.js         — _dict
-    keyed-by.js     — _keyed (sibling-derived runtime keys)
-    tuple.js        — _tuple
-    nested.js       — _nested (recursive arrays)
-    typedef.js      — _typedef (DB lookup + recursive validation)
-db/                 — Node dbAccess adapter: synchronous HTTP to ArangoDB (needs `sync-request`)
-  db-access.js      — makeDbAccess(credentials, cacheSize): pre-loads enum/rule edges, LRU term cache
+  types/            — _number*, _boolean, _string*, _text*, _handle / _timestamp / scopes, _enum, _term_key*
+  shapes/           — _scalar, _object, _object_GeoJSON, _objects, _array, _set, _dict, _keyed, _tuple, _nested, _typedef
+db/                 — Node-side tools
+  db-access.js      — makeDbAccess(credentials, cacheSize): live synchronous HTTP (needs `sync-request`)
+  snapshot-builder.js — buildSnapshot({ gids, query }): fetch a snapshot (async, any AQL client)
+  http-query.js     — makeHttpQuery(credentials): dependency-free AQL query function (fetch)
   lru-cache.js, queries/index.js
 bin/validate.js     — the `metadata-validate` CLI (validate JSON files against the loaded dictionary)
-test/               — regression suite: run.js + test.*.json cases + fixtures/ (see MILKO.md)
+test/               — regression suite (see MILKO.md)
 ```
 
 ---
@@ -56,17 +47,24 @@ test/               — regression suite: run.js + test.*.json cases + fixtures/
 Distributed as a **GitHub-tagged npm dependency** (no registry publish). Pin a tag:
 
 ```json
-{ "dependencies": { "metadata-store-validator": "github:skofic/metadata-store-validator#v1.0.0" } }
+{ "dependencies": { "metadata-store-validator": "github:skofic/metadata-store-validator#v1.1.0" } }
 ```
 
 ```js
-const { validateValue, validateDocument, validateFile,
-        validateByDictionary, validateConformance } = require('metadata-store-validator');
+const { validateByDictionary, validateProperties, makeSnapshotDbAccess } = require('metadata-store-validator');
 ```
 
-It depends on [`geojson-s2`](https://github.com/skofic/geojson-s2) (pinned the same way) for `_object_GeoJSON` values, and **optionally** on `sync-request`, which only `db/` and `bin/` use.
+**From an ES module** the package is CommonJS and builds its exports dynamically, so named imports do not work. Use `createRequire` or a default import:
 
-**In a Foxx service** — add the dependency to the service's `package.json`, run `npm install --omit=optional` in the service directory (no `sync-request`; Foxx needs neither HTTP client nor CLI), and ship `node_modules/` with the bundle. Implement `dbAccess` with `@arangodb` queries — see the example below. `metadata-store-service` does exactly this for its `/validate` routes.
+```js
+import { createRequire } from 'node:module';
+const validator = createRequire(import.meta.url)('metadata-store-validator');
+// or: import validator from 'metadata-store-validator';
+```
+
+It depends on [`geojson-s2`](https://github.com/skofic/geojson-s2) (pinned the same way) for `_object_GeoJSON` values, and **optionally** on `sync-request`, which only the live adapter (`makeDbAccess`), the CLI and the DB tests use. A pipeline that validates through a snapshot does not need it: install with `npm ci --omit=optional`.
+
+**In a Foxx service** — add the dependency to the service's `package.json`, run `npm install --omit=optional` in the service directory, and ship `node_modules/` with the bundle. Implement `dbAccess` with `@arangodb` queries — see the example below. `metadata-store-service` does exactly this for its `/validate` routes.
 
 **CLI** — after `npm install` the `metadata-validate` bin is available (`npx metadata-validate …`, or `node bin/validate.js …` from a checkout):
 
@@ -74,11 +72,18 @@ It depends on [`geojson-s2`](https://github.com/skofic/geojson-s2) (pinned the s
 metadata-validate --compute --credentials path/to/db.credentials.json path/to/data/ --errors-only
 ```
 
-Add `--exclude <path>` (repeatable) for directories that exist in the tree but
-are not loaded into the database — their cross-references would otherwise fail
-against a dictionary that does not contain them.
-
 Run without arguments for the full option list; `MILKO.md` documents the flags, modes, pre-validation transforms and output format.
+
+---
+
+## Errors and warnings
+
+Every entry point returns findings in two lists:
+
+- **`errors`** — the value breaks a hard constraint: wrong type, outside `_range_valid`, outside its unit's physical bound, not a member of its enumeration, a required property missing, …
+- **`warnings`** — the value is acceptable but notable. A value outside `_range_normal` (the range where values are *expected* to fall) is an outlier, reported as `RANGE_OUTLIER`. Lenient mode also reports unknown properties here.
+
+Only errors make a value invalid. The type validators produce one mixed list; `partitionFindings()` (in `errors`) sorts it by the codes in `WARNING_CODES`.
 
 ---
 
@@ -86,26 +91,16 @@ Run without arguments for the full option list; `MILKO.md` documents the flags, 
 
 ### `validateByDictionary(doc, descriptorGid, dbAccess, opts)`
 
-Validates a document against the dictionary using a named descriptor term. For each property key in the document, looks up the key as a dictionary term via `dbAccess.getTerm()` and validates the property value against that term's `_data` section. Recurses into nested `_object` values, `_array` elements whose element type is `_object`, and `_dict` values whose value type is `_object`.
+Validates a document against the dictionary using a named descriptor term. For each property key in the document, looks up the key as a dictionary term via `dbAccess.getTerm()` and validates the property value against that term's `_data` section. Recurses into nested `_object` values, `_array` elements whose element type is `_object`, and `_dict` values whose value type is `_object`. Also works for a single value: `validateByDictionary(12.3, 'env_climate_bio01', dbAccess)`.
 
 Returns `{ errors, warnings, coercions }`. Unknown property keys produce a hard error in strict mode (default) or a warning in lenient mode.
 
 ```js
-const { validateByDictionary } = require('metadata-store-validator');
-
-const result = validateByDictionary(
-  doc,
-  '_term',      // descriptor _gid
-  dbAccess,
-  { strict: true }  // false → UNKNOWN_PROPERTY becomes a warning
-);
-
+const result = validateByDictionary(doc, '_term', dbAccess, { strict: true });
 // result.errors    — hard errors (empty = valid)
-// result.warnings  — soft warnings (unknown properties in lenient mode)
+// result.warnings  — outliers; unknown properties in lenient mode
 // result.coercions — coercion records
 ```
-
-**Validation modes** (by descriptor GID):
 
 | Descriptor | Typical use |
 |---|---|
@@ -117,7 +112,19 @@ const result = validateByDictionary(
 
 ---
 
-### `validateConformance(value, dataSection, dbAccess, opts)`
+### `validateProperties(properties, dbAccess, opts)`
+
+Validates a **data record**: an object whose keys are descriptor `_gid`s, such as the `properties` of a loaded document. Each value is checked against its descriptor — type, valid range, the unit's physical bound, enumeration membership, formats (errors) and normal range (warnings). Finding paths start with the descriptor gid. A `dbAccess` is required.
+
+```js
+const r = validateProperties({ env_climate_bio01: 12.4, env_climate_cdi: 'env_climate_cdi_1' }, dbAccess);
+```
+
+Returns `{ errors, warnings, coercions }`. Options: `strict` (default `true`; `false` turns an unknown gid into a warning), `coerce`.
+
+---
+
+### `validateConformance(value, dataSection, path, dbAccess, opts)`
 
 Lower-level entry point used by `validateByDictionary`. Runs the structural shape validator (`validateData`) then adds the dictionary-lookup pass for `_object` shapes. Can be called directly when you already have the `_data` section in hand.
 
@@ -127,64 +134,132 @@ Returns `{ errors, warnings, coercions }`.
 
 ### `validateValue(value, dataSection, dbAccess, opts)`
 
-Validates a single value against a `_data` section. Used for real-time UI field validation.
+Validates a single value against a `_data` section (no dictionary pass, no rule edges). Used for real-time UI field validation.
 
 ```js
-const { validateValue } = require('metadata-store-validator');
-
 const result = validateValue(
   3.14,
   { _scalar: { _number_float: { _range_valid: { '_min-inclusive': 0 } } } },
   null,   // no DB checks needed for this type
   {}
 );
-
-// result.errors   — array of error objects (empty = valid)
-// result.coercions — array of coercion records (empty when coerce: false)
+// result.errors, result.warnings, result.coercions
 ```
 
 ---
 
 ### `validateDocument(doc, descriptor, dbAccess, opts)`
 
-Resolves computed properties then validates a single document against a descriptor's `_data` section. Mutates `doc` in place to add computed fields.
+Resolves computed properties then validates a single **term** document against a descriptor's `_data` section. Mutates `doc` in place to add computed fields. Returns `{ errors, warnings, coercions }`; compute warnings (e.g. `COMPUTE_ADDED`) appear in `warnings`.
 
 ```js
 const doc = { _code: { _nid: 'ISO_3166', _lid: 'ITA' } };
-
-const result = validateDocument(
-  doc,
-  descriptorTerm,   // term document with a _data section
-  dbAccess,
-  { coerce: true }
-);
-
+const result = validateDocument(doc, descriptorTerm, dbAccess, { coerce: true });
 console.log(doc._code._gid);  // → "ISO_3166_ITA"
-console.log(doc._key);        // → "ISO_3166_ITA"
 ```
 
 ---
 
 ### `validateFile(docs, getDescriptor, dbAccess, opts)`
 
-Batch validates an array of documents (e.g. a loaded JSON file). Stops collecting failures after `opts.maxErrors` documents have failed.
+Batch validates an array of term documents. Stops collecting failures after `opts.maxErrors` documents have failed (default 10; `0` = unlimited). A document with warnings but no errors counts as passed.
 
 ```js
-const report = validateFile(
-  docs,
-  function(doc) { return lookupDescriptor(doc._code._gid); },
-  dbAccess,
-  { maxErrors: 10, coerce: false }
-);
-
-// report.passed    — number of documents that passed
-// report.failed    — number of documents that failed
-// report.truncated — true if stopped early due to maxErrors
+const report = validateFile(docs, doc => lookupDescriptor(doc._code._gid), dbAccess, { maxErrors: 10 });
+// report.passed, report.failed, report.warned, report.truncated
 // report.errors    — [{ index, doc, errors }]
+// report.warnings  — [{ index, path, code, value, expected, message }]
 // report.coercions — [{ index, path, from, to, rule }]
 ```
 
-Set `opts.maxErrors` to `0` for unlimited error collection.
+---
+
+### `createReport(options)` — validation summary
+
+For large runs, printing every warning is useless; the share of values that are outliers is what matters. A report collects many results and tallies errors and warnings **per descriptor and code**, as a share of the values checked, with a few examples of each. It sets no threshold — deciding what share calls for action is up to the consumer.
+
+```js
+const report = createReport({ samples: 3 });
+for (const doc of docs) {
+  report.add(validateProperties(doc.properties, dbAccess), { properties: doc.properties });
+}
+console.log(report.format());
+// Validation summary: 37,476,186 document(s), 0 with errors, 12,400 with warnings
+// Errors: 0
+// Warnings: 12,400
+//   env_climate_spi3  RANGE_OUTLIER  12,400 / 37,476,186 (0.033%)
+//       e.g. Value 3.2 exceeds the maximum of 2 (inclusive)
+```
+
+| Method | Purpose |
+|---|---|
+| `add(result, context)` | Add one result. `context.properties` counts one value per key of the record; `context.gid` (+ `context.values`) attributes a single-value check. |
+| `addEnvelope(result, envelope)` | Add a `validateEnvelope` result; values come from each entry's `count`, findings carry their own counts. |
+| `countValues(gid, n)` | Record values checked without a result. |
+| `summary()` | The tallies as data: `{ documents, documentsWithErrors, documentsWithWarnings, values, errors, warnings }`, each section `{ total, byCode, byDescriptor: { gid: { code: { count, values, share, samples } } } }`. |
+| `format()` | The tallies as text, largest counts first. |
+
+The CLI's `--summary` flag prints the same report at the end of a run.
+
+---
+
+### `describeEnvelopeNeeds(gids, dbAccess)` / `validateEnvelope(envelope, dbAccess, opts)` — large data
+
+A collection of hundreds of millions of documents cannot be read back one value at a time. Its **envelope** can: the database computes a few aggregates per descriptor and these are checked against the dictionary. The aggregation query depends on the collection's layout and stays with the consumer.
+
+`describeEnvelopeNeeds` tells the consumer what to aggregate for each gid: `{ found, kind, type, unit, ranges: { valid, normal, unit } }`, where `kind` is `number | integer | timestamp | boolean | enum | string | other` and the ranges are the dictionary's `_range` objects (so the query can count values outside them).
+
+`validateEnvelope` takes, per gid (all fields optional):
+
+| Field | Meaning |
+|---|---|
+| `count` | values present |
+| `min`, `max` | numeric extremes — validated as values |
+| `types` | distinct AQL `TYPENAME()`s seen, e.g. `["number"]` |
+| `nonInteger` | values with a fractional part (integer and timestamp kinds) |
+| `outOfValid` | values outside the valid range or the unit bound |
+| `outOfNormal` | values outside the normal range |
+| `distinct` | string / enum values, `[value]` or `[{ value, count }]` — each validated |
+| `distinctTruncated` | `true` when `distinct` is not the complete set |
+
+It returns `{ errors, warnings, skipped }`; each finding carries `gid`, `which` (`descriptor | type | integer | count | min | max | distinct`) and `count` (values concerned, or `null` when only an example is known). Non-scalar descriptors are `skipped` — validate those in-process.
+
+---
+
+### `checkUnitBounds(term, dbAccess)`
+
+Authoring check: reports `UNIT_RANGE_CONFLICT` when a descriptor's declared `_range_valid` or `_range_normal` reaches beyond the physical bound of the unit it selects (or cannot overlap it). The CLI runs it on every term in term mode.
+
+---
+
+## Unit physical bounds (`unit_range`)
+
+A unit term may carry `_prop.unit_range`, a `_range` object stating a bound no value in that unit can cross — kelvin ≥ 0, °C ≥ −273.15, percent 0…100. When a numeric descriptor selects such a unit via `_unit`, a value must satisfy **both** the descriptor's `_range_valid` and the unit's bound (their intersection). A breach of the unit bound is a `RANGE_VIOLATION` whose message names the unit. Without a `dbAccess` the unit term cannot be read and the bound is not checked.
+
+---
+
+## Dictionary snapshots — bulk validation
+
+The live adapter makes a blocking HTTP call per new term: fine for a CLI sweep, wrong for a pipeline validating millions of values. A **snapshot** holds just the terms and edges a run needs, fetched once, and answers every lookup from memory.
+
+```js
+const { buildSnapshot, makeHttpQuery, makeSnapshotDbAccess } = require('metadata-store-validator');
+
+const snapshot = await buildSnapshot({
+  gids:  ['env_climate_bio01', 'env_climate_spi3', 'env_climate_cdi'],
+  query: makeHttpQuery({ host, database: 'metadata', username, password }),
+  // or with arangojs: query: (q, b) => db.query(q, b).then(cursor => cursor.all()),
+});
+if (snapshot.missing.length) throw new Error('unknown descriptors: ' + snapshot.missing.join(', '));
+
+const dbAccess = makeSnapshotDbAccess(snapshot);   // synchronous, no network
+```
+
+`buildSnapshot` fetches the three anchor terms, the requested terms, and everything their `_data` refers to (`_typedef` targets, `_unit` terms, `_enums` roots, object-schema property gids, `_keyed` keys), plus the enumeration edges of those roots and the rule edges. A failed query rejects; requested gids with no term are listed in `missing`.
+
+The snapshot is plain JSON (version 1: `terms`, `missing`, `enumEdges`, `propertyOfRules`, `valueOfRules`, `source`, `builtAt`), so a run can store it as the record of the dictionary its data was checked against. `makeSnapshotDbAccess` refuses a snapshot without the anchor terms, and a lookup for a gid never requested **throws** — pass `{ onMiss: 'null' }` to treat such gids as absent instead. `isEnumRoot` for roots outside the snapshot's enumerations falls back to a term lookup and throws likewise; data descriptors do not use it.
+
+The snapshot accessor and the live adapter share their edge logic (`lib/edge-index.js`), so they validate identically (`test/snapshot-parity.js` checks it against a live database).
 
 ---
 
@@ -193,7 +268,7 @@ Set `opts.maxErrors` to `0` for unlimited error collection.
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `coerce` | boolean | `false` | Attempt type coercion before strict validation. Coerced values are reported in `result.coercions`. |
-| `strict` | boolean | `true` | (`validateByDictionary` / `validateConformance` only) When `false`, unknown property keys produce warnings instead of errors. |
+| `strict` | boolean | `true` | (`validateByDictionary` / `validateConformance` / `validateProperties`) When `false`, unknown property keys produce warnings instead of errors. |
 | `maxErrors` | number | `10` | (`validateFile` only) Stop after this many failed documents. Set to `0` for unlimited. |
 
 ### Coercion rules
@@ -217,7 +292,7 @@ Typed string variants (`_string_date`, `_string_URI`, etc.) are excluded from co
 
 ## Error object
 
-Every error object has the same shape:
+Every error and warning has the same shape:
 
 ```js
 {
@@ -236,12 +311,13 @@ Every error object has the same shape:
 | `WRONG_TYPE` | Value is not the expected JavaScript type |
 | `AMBIGUOUS_SHAPE` | Multiple shape or type keys found where only one is allowed |
 | `MISSING_SHAPE` | No recognisable shape key present |
-| `UNKNOWN_PROPERTY` | Closed schema: property not in the whitelist |
+| `UNKNOWN_PROPERTY` | Closed schema: property not in the whitelist; conformance: key is not a dictionary term |
 | `MISSING_REQUIRED` | Required property is absent |
 | `BANNED_PROPERTY` | Banned property is present |
 | `SELECTION_VIOLATION` | `_required` selector count constraint not satisfied |
-| `RANGE_VIOLATION` | Value outside `_range_valid` (hard error) |
-| `RANGE_OUTLIER` | Value outside `_range_normal` (warning — outside expected range) |
+| `RANGE_VIOLATION` | Value outside `_range_valid`, or outside its unit's physical bound (`unit_range`) |
+| `RANGE_OUTLIER` | **Warning** — value outside `_range_normal` (outside the expected range) |
+| `UNIT_RANGE_CONFLICT` | A descriptor's declared range reaches beyond its unit's physical bound |
 | `REGEXP_MISMATCH` | String does not match `_regexp` constraint |
 | `CASE_MISMATCH` | String letter case violates the `_case` constraint |
 | `LENGTH_VIOLATION` | String length outside the `_length` bounds |
@@ -262,19 +338,21 @@ Every error object has the same shape:
 | `NO_SCHEMA_FOR_POSITION` | `_objects` element index has no matching slot schema |
 | `UNREACHABLE_OBJECT_SCOPE` | `_scope_object` body is non-empty but the referenced sibling is missing from the container |
 | `INVALID_GEOJSON_TYPE` | GeoJSON object's `type` field is not in the `_type_GeoJSON` allowed set |
+| `INVALID_GEOJSON` | GeoJSON structure or coordinates are malformed (RFC 7946 / S2) |
+| `INVALID_GEOJSON_WINDING` | A polygon ring winds the wrong way; S2 would index the complement of the intended area |
 | `TYPEDEF_NOT_FOUND` | `_typedef` value does not match any term `_gid` |
 | `INVALID_TYPEDEF` | The typedef term has no usable `_data` section |
 | `MISSING_FIELD` | A field required for property computation is absent |
 | `COMPUTE_MISMATCH` | A computed property is present but its value disagrees with the computed result |
-| `COMPUTE_ADDED` | A computed property was absent; the computed value was added (or should be added) |
+| `COMPUTE_ADDED` | **Warning** — a computed property was absent; the computed value was added (or should be added) |
 
 ---
 
 ## The `dbAccess` object
 
-Some validations require querying the ArangoDB database: `_enum` (vocabulary membership), `_term_key*` (term existence and role), `_typedef` (typedef resolution), the type vocabularies themselves, and — in conformance mode — the rule edges. Pass `null` to skip the DB-backed checks (the type vocabularies then fall back to the dispatch tables).
+Some validations require the dictionary: `_enum` (vocabulary membership), `_term_key*` (term existence and role), `_typedef` (typedef resolution), unit physical bounds, the type vocabularies themselves, and — in conformance mode — the rule edges. Pass `null` to skip the DB-backed checks (the type vocabularies then fall back to the dispatch tables).
 
-`db/db-access.js` is the reference implementation (synchronous HTTP; used by the CLI and the tests). When providing your own, implement these synchronous methods:
+Two implementations ship with the package: the live `makeDbAccess` (`db/db-access.js`, synchronous HTTP; used by the CLI and the tests) and `makeSnapshotDbAccess` (above). Both build their edge lookups with `lib/edge-index.js`. When providing your own, implement these synchronous methods:
 
 ```js
 const dbAccess = {
@@ -289,7 +367,7 @@ const dbAccess = {
   // Returns true if the term has `role` in its _domn._term_role array.
   termHasRole(gid, role) { /* ... */ return true; },
 
-  // Returns the full term document (must include _data) or null.
+  // Returns the full term document (must include _data and, for units, _prop) or null.
   getTerm(gid) { /* ... */ return termDoc; },
 
   // Returns true if `node` is a valid branch in the graph rooted at `root` —
@@ -386,7 +464,9 @@ All three live in `metadata-store`'s `data/core/terms.type.json` and declare the
 
 **New shape**: add the shape to `_type_shape`'s selection, write a validator in `lib/shapes/`, and add one row to `SHAPE_VALIDATORS` in `lib/validate.js`.
 
-In both cases there is **no list to keep in sync** — the dispatch table records only which entries the code can handle, which is a different fact from which entries exist. A term declaring something the code cannot handle raises `UNIMPLEMENTED_SHAPE` rather than passing silently.
+**New warning-class finding**: add its code to `WARNING_CODES` in `lib/errors.js`, or it will be reported as an error.
+
+In both type and shape cases there is **no list to keep in sync** — the dispatch table records only which entries the code can handle, which is a different fact from which entries exist. A term declaring something the code cannot handle raises `UNIMPLEMENTED_SHAPE` rather than passing silently.
 
 > Historical note: these lists were previously duplicated by hand in four places. Two copies drifted, and because an unrecognised key is read as "no key" — which both `shapes/array.js` and `shapes/scalar.js` treat as "accept anything" — the drift disabled validation silently instead of raising an error. Reading the terms removes that failure mode by construction.
 

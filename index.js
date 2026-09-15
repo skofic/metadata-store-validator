@@ -30,4 +30,15 @@ Object.defineProperty(api, 'makeDbAccess', {
 	get() { return require('./db/db-access'); },
 });
 
+// Lazy for the same reason: the snapshot builder and the fetch-based query
+// function are Node-side tools that Foxx never needs.
+Object.defineProperty(api, 'buildSnapshot', {
+	enumerable: true,
+	get() { return require('./db/snapshot-builder').buildSnapshot; },
+});
+Object.defineProperty(api, 'makeHttpQuery', {
+	enumerable: true,
+	get() { return require('./db/http-query').makeHttpQuery; },
+});
+
 module.exports = api;

@@ -1,0 +1,720 @@
+{
+	"version": 1,
+	"termsCol": "terms",
+	"source": {
+		"note": "hand-built test fixture; anchor and unit terms copied from metadata-store data/"
+	},
+	"builtAt": "2026-09-15T00:00:00.000Z",
+	"terms": {
+		"_type_shape": {
+			"_code": {
+				"_nid": "_type",
+				"_lid": "shape",
+				"_gid": "_type_shape",
+				"_aid": [
+					"shape"
+				]
+			},
+			"_info": {
+				"_title": {
+					"ISO_639_3_eng": "Data shape"
+				},
+				"_definition": {
+					"ISO_639_3_eng": "The typedef term that defines the complete set of data shape keys permitted in a _data section. A non-empty _data object must contain at most one of the ten listed shape keys; an empty _data ({}) is valid and means the property accepts any value. Referenced via _typedef: \"_type_shape\" by any descriptor whose value is itself a full data shape definition."
+				},
+				"_description": {
+					"ISO_639_3_eng": "`_type_shape` is the reusable type definition that underpins the [`_data`](_data.md) section. When a `_data` object is non-empty, the validator checks that at most one of the ten shape keys is present. An empty `_data` (`{}`) is a special and fully valid case — it means the property accepts a value of any shape and type.\n\nThe ten shape keys cover every data representation form available in the dictionary:\n\n| Shape key | Description |\n|---|---|\n| [`_scalar`](_scalar.md) | A single typed value. The type is expressed as a property key inside the `_scalar` object. |\n| [`_object`](_object.md) | A struct or document, with an optional inline schema (`_open` or `_closed`). |\n| [`_object_GeoJSON`](_object_GeoJSON.md) | A GeoJSON geometry object (RFC 7946), validated by a dedicated GeoJSON validator rather than the rule language. |\n| [`_dict`](_dict.md) | A key/value dictionary with typed keys ([`_dict_key`](_dict_key.md)) and typed values ([`_dict_value`](_dict_value.md)). |\n| [`_keyed`](_keyed.md) | A dictionary whose permitted keys are resolved at runtime from sibling property values in the containing object. |\n| [`_tuple`](_tuple.md) | A positional array where each element position carries its own `_data` definition. |\n| [`_array`](_array.md) | An ordered list of same-type elements. |\n| [`_set`](_set.md) | An unordered collection of unique comparable values. |\n| [`_nested`](_nested.md) | A recursively nested array whose leaf elements are typed sets of comparable values. |\n| [`_typedef`](_typedef.md) | A reference to a reusable typedef term by `_gid`. The typedef's shape is substituted inline during validation. |\n\nWithin the dictionary, `_type_shape` is referenced wherever a property's value is itself a complete data shape definition — for example, by [`_dict_value`](_dict_value.md), which accepts any `_data` shape as the value type of a dictionary."
+				}
+			},
+			"_data": {
+				"_object": {
+					"_closed": {
+						"_required": [
+							{
+								"_selectors": [
+									{
+										"_all": {
+											"_max-items": 1
+										}
+									}
+								],
+								"_selection": [
+									"_scalar",
+									"_object",
+									"_object_GeoJSON",
+									"_objects",
+									"_dict",
+									"_keyed",
+									"_tuple",
+									"_array",
+									"_set",
+									"_nested",
+									"_typedef"
+								]
+							}
+						]
+					}
+				}
+			},
+			"_domn": {
+				"_term_role": [
+					"_term_role_authority",
+					"_term_role_descriptor",
+					"_term_role_system",
+					"_term_role_typedef"
+				]
+			},
+			"_key": "_type_shape"
+		},
+		"_type_scalar": {
+			"_code": {
+				"_nid": "_type",
+				"_lid": "scalar",
+				"_gid": "_type_scalar",
+				"_aid": [
+					"scalar"
+				]
+			},
+			"_info": {
+				"_title": {
+					"ISO_639_3_eng": "Scalar data type"
+				},
+				"_definition": {
+					"ISO_639_3_eng": "The typedef term that defines the complete set of types accepted as the type key in a _scalar object. Its schema requires exactly one of the listed type keys to be present. Referenced via _typedef: \"_type_scalar\" by the _scalar shape property."
+				},
+				"_description": {
+					"ISO_639_3_eng": "`_type_scalar` is the reusable type definition used by the [`_scalar`](_scalar.md) data shape. When a descriptor uses `_scalar`, the validator delegates type-key validation to this typedef: it checks that exactly one of the listed type keys is present in the `_scalar` object.\n\nThe full set of accepted type keys spans all scalar type families:\n\n| Family | Types |\n|---|---|\n| Number | [`_number`](_number.md), [`_number_float`](_number_float.md), [`_number_integer`](_number_integer.md) |\n| String | [`_string`](_string.md), [`_string_URI`](_string_URI.md), [`_string_Email`](_string_Email.md), [`_string_Hostname`](_string_Hostname.md), [`_string_IPv4`](_string_IPv4.md), [`_string_IPv6`](_string_IPv6.md), [`_string_YMD`](_string_YMD.md), [`_string_date`](_string_date.md), [`_string_time`](_string_time.md), [`_string_date-time`](_string_date-time.md), [`_string_LaTeX`](_string_LaTeX.md), [`_string_HEX`](_string_HEX.md), [`_string_regexp`](_string_regexp.md) |\n| Text | [`_text`](_text.md), [`_text_HTML`](_text_HTML.md), [`_text_Markdown`](_text_Markdown.md), [`_text_SVG`](_text_SVG.md) |\n| Term key | [`_term_key`](_term_key.md), [`_term_key_enum-root`](_term_key_enum-root.md), [`_term_key_enum-item`](_term_key_enum-item.md), [`_term_key_descriptor`](_term_key_descriptor.md) |\n| Other | [`_handle`](_handle.md), [`_handle_SVG`](_handle_SVG.md), [`_timestamp`](_timestamp.md), [`_boolean`](_boolean.md), [`_enum`](_enum.md) |\n| Scope | [`_scope_enum`](_scope_enum.md), [`_scope_object`](_scope_object.md), [`_scope_sibling`](_scope_sibling.md), [`_scope_target`](_scope_target.md) |"
+				}
+			},
+			"_data": {
+				"_object": {
+					"_closed": {
+						"_required": [
+							{
+								"_selectors": [
+									{
+										"_all": {
+											"_max-items": 1,
+											"_min-items": 1
+										}
+									}
+								],
+								"_selection": [
+									"_number",
+									"_number_float",
+									"_number_integer",
+									"_string",
+									"_string_URI",
+									"_string_Email",
+									"_string_Hostname",
+									"_string_IPv4",
+									"_string_IPv6",
+									"_string_date",
+									"_string_time",
+									"_string_date-time",
+									"_string_YMD",
+									"_string_LaTeX",
+									"_string_HEX",
+									"_string_regexp",
+									"_text",
+									"_text_HTML",
+									"_text_Markdown",
+									"_text_SVG",
+									"_term_key",
+									"_term_key_enum-root",
+									"_term_key_enum-item",
+									"_term_key_descriptor",
+									"_enum",
+									"_scope_enum",
+									"_scope_target",
+									"_scope_object",
+									"_scope_sibling",
+									"_handle",
+									"_handle_SVG",
+									"_timestamp",
+									"_boolean"
+								]
+							}
+						]
+					}
+				}
+			},
+			"_domn": {
+				"_term_role": [
+					"_term_role_authority",
+					"_term_role_descriptor",
+					"_term_role_system",
+					"_term_role_typedef"
+				]
+			},
+			"_key": "_type_scalar"
+		},
+		"_type_key": {
+			"_code": {
+				"_nid": "_type",
+				"_lid": "key",
+				"_gid": "_type_key",
+				"_aid": [
+					"key"
+				]
+			},
+			"_info": {
+				"_title": {
+					"ISO_639_3_eng": "Key data type"
+				},
+				"_definition": {
+					"ISO_639_3_eng": "The typedef term that defines the set of string-compatible types accepted as the key type in a _dict_key object. Excludes number types, boolean, timestamp, text types, and _string_regexp, which are not suitable as dictionary keys."
+				},
+				"_description": {
+					"ISO_639_3_eng": "`_type_key` is the reusable type definition used by the [`_dict_key`](_dict_key.md) data shape. Dictionary keys must be string-compatible and unambiguously comparable, so several comparable types accepted as [`_set`](_set.md) / [`_nested`](_nested.md) elements are excluded: number types ([`_number`](_number.md), [`_number_float`](_number_float.md), [`_number_integer`](_number_integer.md)), [`_boolean`](_boolean.md), [`_timestamp`](_timestamp.md), all text types, and [`_string_regexp`](_string_regexp.md) (using a pattern as a dictionary key would be ambiguous). Most members of the [`_scope`](_scope.md) family are also excluded — their compound or dotted value forms aren't intended as dictionary keys — with the deliberate exception of [`_scope_sibling`](_scope_sibling.md), which is the schema-side key type used by [`_keyed`](_keyed.md).\n\nAccepted key types:\n\n| Family | Types |\n|---|---|\n| String | [`_string`](_string.md), [`_string_URI`](_string_URI.md), [`_string_Email`](_string_Email.md), [`_string_Hostname`](_string_Hostname.md), [`_string_IPv4`](_string_IPv4.md), [`_string_IPv6`](_string_IPv6.md), [`_string_YMD`](_string_YMD.md), [`_string_date`](_string_date.md), [`_string_time`](_string_time.md), [`_string_date-time`](_string_date-time.md), [`_string_LaTeX`](_string_LaTeX.md), [`_string_HEX`](_string_HEX.md) |\n| Term key | [`_term_key`](_term_key.md), [`_term_key_enum-root`](_term_key_enum-root.md), [`_term_key_enum-item`](_term_key_enum-item.md), [`_term_key_descriptor`](_term_key_descriptor.md) |\n| Other | [`_handle`](_handle.md), [`_handle_SVG`](_handle_SVG.md), [`_enum`](_enum.md) |\n| Scope | [`_scope_sibling`](_scope_sibling.md) |"
+				}
+			},
+			"_data": {
+				"_object": {
+					"_closed": {
+						"_required": [
+							{
+								"_selectors": [
+									{
+										"_all": {
+											"_max-items": 1,
+											"_min-items": 1
+										}
+									}
+								],
+								"_selection": [
+									"_string",
+									"_string_URI",
+									"_string_Email",
+									"_string_Hostname",
+									"_string_IPv4",
+									"_string_IPv6",
+									"_string_YMD",
+									"_string_date",
+									"_string_time",
+									"_string_date-time",
+									"_string_LaTeX",
+									"_string_HEX",
+									"_term_key",
+									"_term_key_enum-root",
+									"_term_key_enum-item",
+									"_term_key_descriptor",
+									"_handle",
+									"_handle_SVG",
+									"_enum",
+									"_scope_sibling"
+								]
+							}
+						]
+					}
+				}
+			},
+			"_domn": {
+				"_term_role": [
+					"_term_role_authority",
+					"_term_role_descriptor",
+					"_term_role_system",
+					"_term_role_typedef"
+				]
+			},
+			"_key": "_type_key"
+		},
+		"unit_Temperature_K": {
+			"_code": {
+				"_nid": "unit_Temperature",
+				"_lid": "K",
+				"_gid": "unit_Temperature_K",
+				"_uri": "https://qudt.org/vocab/unit/K",
+				"_aid": [
+					"K"
+				],
+				"_name": "K",
+				"_symbol": "\\mathrm{K}",
+				"_symbol_print": "K"
+			},
+			"_info": {
+				"_title": {
+					"ISO_639_3_eng": "Kelvin"
+				},
+				"_definition": {
+					"ISO_639_3_eng": "The SI base unit of thermodynamic temperature."
+				},
+				"_description": {
+					"ISO_639_3_eng": "The kelvin is defined by fixing the numerical value of the Boltzmann constant to exactly 1.380 649 × 10⁻²³ J/K. It is the SI coherent unit for thermodynamic temperature and uses an absolute zero reference point (0 K = −273.15 °C).\n\nIn the EUFGIS GeoService, land surface temperature (LST) from MODIS is distributed in kelvin, and CHELSA temperature variables are stored internally in kelvin before conversion to Celsius for display. The kelvin is the pivot unit for all temperature conversions in this dictionary."
+				},
+				"_references": {
+					"_url": [
+						"[QUDT](https://qudt.org) — Quantities, Units, Dimensions and Types ontology.",
+						"[UCUM](https://ucum.org) — Unified Code for Units of Measure."
+					]
+				}
+			},
+			"_domn": {
+				"_term_role": [
+					"_term_role_enum-item"
+				]
+			},
+			"_prop": {
+				"QUDT_dimension_vector": "A0E0L0I0M0H1T0D0",
+				"QUDT_multiplier": 1,
+				"SI_base": true,
+				"SI_factor": 1,
+				"SI_offset": 0,
+				"UCUM_code": "K",
+				"unit_range": {
+					"_min-inclusive": 0
+				}
+			},
+			"_key": "unit_Temperature_K"
+		},
+		"unit_Percent_pct": {
+			"_code": {
+				"_nid": "unit_Percent",
+				"_lid": "pct",
+				"_gid": "unit_Percent_pct",
+				"_uri": "https://qudt.org/vocab/unit/PERCENT",
+				"_aid": [
+					"pct",
+					"%",
+					"PERCENT"
+				],
+				"_name": "PERCENT",
+				"_symbol": "\\%",
+				"_symbol_print": "%"
+			},
+			"_info": {
+				"_title": {
+					"ISO_639_3_eng": "Percent"
+				},
+				"_definition": {
+					"ISO_639_3_eng": "A dimensionless unit equal to one hundredth (0.01); a value of 1 % equals 0.01 in SI."
+				},
+				"_description": {
+					"ISO_639_3_eng": "Percent is the conventional unit for quantities that are naturally expressed as a proportion of 100. It differs from the pure dimensionless unit [`unit_Dimensionless_1`](unit_Dimensionless_1.md) in its scale convention: data stored in percent (0–100 %) must be multiplied by 0.01 to obtain the SI dimensionless value (0.0–1.0).\n\nIn the EUFGIS database, percent is used for:\n\n- **Relative humidity** (ERA5-Land, 0–100 %)\n- **Cloud cover** (MODIS cloud fraction, 0–100 %)\n- **Desiccation risk** (modelled PLC — percent loss of hydraulic conductivity, 0–100 %)\n- **Relative water content (RWC)** — numerator in hydraulic capacitance (%RWC/MPa)\n- **Proportion of polymorphic loci** (genetic variable, 0–100 %)\n\nConversion: SI_value = value × 0.01. SI_factor = 0.01."
+				},
+				"_references": {
+					"_url": [
+						"[QUDT](https://qudt.org) — Quantities, Units, Dimensions and Types ontology.",
+						"[UCUM](https://ucum.org) — Unified Code for Units of Measure."
+					]
+				}
+			},
+			"_domn": {
+				"_term_role": [
+					"_term_role_enum-item"
+				]
+			},
+			"_prop": {
+				"QUDT_dimension_vector": "A0E0L0I0M0H0T0D0",
+				"QUDT_multiplier": 0.01,
+				"SI_factor": 0.01,
+				"UCUM_code": "%",
+				"unit_range": {
+					"_max-inclusive": 100,
+					"_min-inclusive": 0
+				}
+			},
+			"_key": "unit_Percent_pct"
+		},
+		"unit_PlaneAngle_deg": {
+			"_code": {
+				"_nid": "unit_PlaneAngle",
+				"_lid": "deg",
+				"_gid": "unit_PlaneAngle_deg",
+				"_uri": "https://qudt.org/vocab/unit/DEG",
+				"_aid": [
+					"deg",
+					"°",
+					"DEG"
+				],
+				"_name": "DEG",
+				"_symbol": "^\\circ",
+				"_symbol_print": "°"
+			},
+			"_info": {
+				"_title": {
+					"ISO_639_3_eng": "Degree"
+				},
+				"_definition": {
+					"ISO_639_3_eng": "Unit of plane angle equal to π/180 radians (approximately 0.017 453 rad)."
+				},
+				"_description": {
+					"ISO_639_3_eng": "The degree of arc is the conventional unit for expressing terrain slope and aspect in the EUFGIS characterisation database. Slope is reported in degrees from horizontal (0° = flat, 90° = vertical); aspect is reported as degrees clockwise from north (0°/360° = north, 90° = east). Geographic coordinates (latitude, longitude) are also expressed in decimal degrees."
+				},
+				"_references": {
+					"_url": [
+						"[QUDT](https://qudt.org) — Quantities, Units, Dimensions and Types ontology.",
+						"[UCUM](https://ucum.org) — Unified Code for Units of Measure."
+					]
+				}
+			},
+			"_domn": {
+				"_term_role": [
+					"_term_role_enum-item"
+				]
+			},
+			"_prop": {
+				"QUDT_dimension_vector": "A0E0L0I0M0H0T0D0",
+				"QUDT_multiplier": 0.017453292519943,
+				"SI_factor": 0.017453292519943,
+				"UCUM_code": "deg"
+			},
+			"_key": "unit_PlaneAngle_deg"
+		},
+		"_TEST_temp_K": {
+			"_key": "_TEST_temp_K",
+			"_code": {
+				"_gid": "_TEST_temp_K",
+				"_lid": "K",
+				"_aid": [
+					"K"
+				]
+			},
+			"_info": {
+				"_title": {
+					"ISO_639_3_eng": "Test temperature in kelvin (unit bound only, normal range)"
+				}
+			},
+			"_data": {
+				"_scalar": {
+					"_number_float": {
+						"_unit": "unit_Temperature_K",
+						"_range_normal": {
+							"_min-inclusive": 250,
+							"_max-inclusive": 320
+						}
+					}
+				}
+			},
+			"_domn": {
+				"_term_role": [
+					"_term_role_descriptor"
+				]
+			}
+		},
+		"_TEST_pct": {
+			"_key": "_TEST_pct",
+			"_code": {
+				"_gid": "_TEST_pct",
+				"_lid": "pct",
+				"_aid": [
+					"pct"
+				]
+			},
+			"_info": {
+				"_title": {
+					"ISO_639_3_eng": "Test percent whose valid range exceeds the unit bound"
+				}
+			},
+			"_data": {
+				"_scalar": {
+					"_number": {
+						"_unit": "unit_Percent_pct",
+						"_range_valid": {
+							"_min-inclusive": 0,
+							"_max-inclusive": 150
+						}
+					}
+				}
+			},
+			"_domn": {
+				"_term_role": [
+					"_term_role_descriptor"
+				]
+			}
+		},
+		"_TEST_angle": {
+			"_key": "_TEST_angle",
+			"_code": {
+				"_gid": "_TEST_angle",
+				"_lid": "angle",
+				"_aid": [
+					"angle"
+				]
+			},
+			"_info": {
+				"_title": {
+					"ISO_639_3_eng": "Test angle (unit without a physical bound)"
+				}
+			},
+			"_data": {
+				"_scalar": {
+					"_number_float": {
+						"_unit": "unit_PlaneAngle_deg",
+						"_range_valid": {
+							"_min-inclusive": 0,
+							"_max-exclusive": 360
+						}
+					}
+				}
+			},
+			"_domn": {
+				"_term_role": [
+					"_term_role_descriptor"
+				]
+			}
+		},
+		"_TEST_int": {
+			"_key": "_TEST_int",
+			"_code": {
+				"_gid": "_TEST_int",
+				"_lid": "int",
+				"_aid": [
+					"int"
+				]
+			},
+			"_info": {
+				"_title": {
+					"ISO_639_3_eng": "Test integer"
+				}
+			},
+			"_data": {
+				"_scalar": {
+					"_number_integer": {
+						"_range_valid": {
+							"_min-inclusive": 0,
+							"_max-inclusive": 100
+						}
+					}
+				}
+			},
+			"_domn": {
+				"_term_role": [
+					"_term_role_descriptor"
+				]
+			}
+		},
+		"_TEST_label": {
+			"_key": "_TEST_label",
+			"_code": {
+				"_gid": "_TEST_label",
+				"_lid": "label",
+				"_aid": [
+					"label"
+				]
+			},
+			"_info": {
+				"_title": {
+					"ISO_639_3_eng": "Test label"
+				}
+			},
+			"_data": {
+				"_scalar": {
+					"_string": {
+						"_length": {
+							"_min-length": 1,
+							"_max-length": 10
+						}
+					}
+				}
+			},
+			"_domn": {
+				"_term_role": [
+					"_term_role_descriptor"
+				]
+			}
+		},
+		"_TEST_color": {
+			"_key": "_TEST_color",
+			"_code": {
+				"_gid": "_TEST_color",
+				"_lid": "color",
+				"_aid": [
+					"color"
+				]
+			},
+			"_info": {
+				"_title": {
+					"ISO_639_3_eng": "Test colour"
+				}
+			},
+			"_data": {
+				"_scalar": {
+					"_enum": {
+						"_enums": [
+							"_TEST_colors"
+						]
+					}
+				}
+			},
+			"_domn": {
+				"_term_role": [
+					"_term_role_descriptor"
+				]
+			}
+		},
+		"_TEST_geom": {
+			"_key": "_TEST_geom",
+			"_code": {
+				"_gid": "_TEST_geom",
+				"_lid": "geom",
+				"_aid": [
+					"geom"
+				]
+			},
+			"_info": {
+				"_title": {
+					"ISO_639_3_eng": "Test geometry (not an envelope kind)"
+				}
+			},
+			"_data": {
+				"_object_GeoJSON": {}
+			},
+			"_domn": {
+				"_term_role": [
+					"_term_role_descriptor"
+				]
+			}
+		},
+		"_TEST_record": {
+			"_key": "_TEST_record",
+			"_code": {
+				"_gid": "_TEST_record",
+				"_lid": "record",
+				"_aid": [
+					"record"
+				]
+			},
+			"_info": {
+				"_title": {
+					"ISO_639_3_eng": "Test record schema"
+				}
+			},
+			"_data": {
+				"_object": {
+					"_open": {
+						"_recommended": [
+							"_TEST_color",
+							"_TEST_label",
+							"_TEST_temp_K"
+						]
+					}
+				}
+			},
+			"_domn": {
+				"_term_role": [
+					"_term_role_descriptor"
+				]
+			}
+		},
+		"_TEST_colors": {
+			"_key": "_TEST_colors",
+			"_code": {
+				"_gid": "_TEST_colors",
+				"_lid": "colors",
+				"_aid": [
+					"colors"
+				]
+			},
+			"_info": {
+				"_title": {
+					"ISO_639_3_eng": "Test colours"
+				}
+			},
+			"_domn": {
+				"_term_role": [
+					"_term_role_enum-root"
+				]
+			}
+		},
+		"_TEST_colors_red": {
+			"_key": "_TEST_colors_red",
+			"_code": {
+				"_gid": "_TEST_colors_red",
+				"_lid": "red",
+				"_aid": [
+					"red"
+				]
+			},
+			"_info": {
+				"_title": {
+					"ISO_639_3_eng": "Red"
+				}
+			},
+			"_domn": {
+				"_term_role": [
+					"_term_role_enum-item"
+				]
+			}
+		},
+		"_TEST_colors_warm": {
+			"_key": "_TEST_colors_warm",
+			"_code": {
+				"_gid": "_TEST_colors_warm",
+				"_lid": "warm",
+				"_aid": [
+					"warm"
+				]
+			},
+			"_info": {
+				"_title": {
+					"ISO_639_3_eng": "Warm colours (section)"
+				}
+			}
+		},
+		"_TEST_colors_orange": {
+			"_key": "_TEST_colors_orange",
+			"_code": {
+				"_gid": "_TEST_colors_orange",
+				"_lid": "orange",
+				"_aid": [
+					"orange"
+				]
+			},
+			"_info": {
+				"_title": {
+					"ISO_639_3_eng": "Orange"
+				}
+			},
+			"_domn": {
+				"_term_role": [
+					"_term_role_enum-item"
+				]
+			}
+		}
+	},
+	"missing": [],
+	"enumEdges": [
+		{
+			"f": "terms/_TEST_colors_red",
+			"t": "terms/_TEST_colors",
+			"p": [
+				"terms/_TEST_colors"
+			],
+			"pred": "_predicate_enum-of"
+		},
+		{
+			"f": "terms/_TEST_colors_warm",
+			"t": "terms/_TEST_colors",
+			"p": [
+				"terms/_TEST_colors"
+			],
+			"pred": "_predicate_section-of"
+		},
+		{
+			"f": "terms/_TEST_colors_orange",
+			"t": "terms/_TEST_colors_warm",
+			"p": [
+				"terms/_TEST_colors"
+			],
+			"pred": "_predicate_enum-of"
+		}
+	],
+	"propertyOfRules": [
+		{
+			"f": "terms/_TEST_color",
+			"d": {
+				"terms/_TEST_record": {
+					"_object": {
+						"_open": {
+							"_banned": [
+								"_TEST_label"
+							]
+						}
+					}
+				}
+			}
+		}
+	],
+	"valueOfRules": []
+}

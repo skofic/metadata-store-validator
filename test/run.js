@@ -23,7 +23,7 @@ const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
 
-const { validateValue, validateConformance, validateByDictionary } = require('..');
+const { validateValue, validateConformance, validateByDictionary, makeSnapshotDbAccess } = require('..');
 
 // ── CLI parsing ────────────────────────────────────────────────────────────────
 
@@ -129,6 +129,19 @@ function cleanupFixtures() {
 	console.log('Cleaned up ' + n + '/' + fixtureHandles.length + ' fixture document(s).');
 }
 
+// ── Snapshot accessor (no DB) ──────────────────────────────────────────────────
+
+// Cases marked `_snapshot: true` run against a dbAccess built from the
+// dictionary snapshot in fixtures/snapshot.test.json — no database needed.
+let snapshotAccess = null;
+function getSnapshotAccess() {
+	if (!snapshotAccess) {
+		const snap = JSON.parse(fs.readFileSync(path.join(TEST_DIR, 'fixtures', 'snapshot.test.json'), 'utf8'));
+		snapshotAccess = makeSnapshotDbAccess(snap);
+	}
+	return snapshotAccess;
+}
+
 // ── Test execution ─────────────────────────────────────────────────────────────
 
 function runFile(filePath) {
@@ -144,6 +157,8 @@ function runFile(filePath) {
 			continue;
 		}
 
+		const access = tc._snapshot ? getSnapshotAccess() : dbAccess;
+
 		// Resolve the data section to validate against.
 		// In conformance mode with _descriptor, validateByDictionary handles the
 		// lookup itself — no need to pre-fetch here.
@@ -153,11 +168,11 @@ function runFile(filePath) {
 		} else if (tc._data !== undefined) {
 			dataSection = tc._data;
 		} else if (tc._descriptor) {
-			if (!dbAccess) {
+			if (!access) {
 				results.push({ label, status: 'skipped', reason: 'no DB (descriptor lookup)' });
 				continue;
 			}
-			const term = dbAccess.getTerm(tc._descriptor);
+			const term = access.getTerm(tc._descriptor);
 			if (!term) {
 				results.push({ label, status: 'fail', reason: 'descriptor "' + tc._descriptor + '" not found in DB' });
 				continue;
@@ -171,12 +186,12 @@ function runFile(filePath) {
 		// Validate — use conformance pass when _conformance: true so that
 		// property-of and value-of rule edges are applied from the DB.
 		let result;
-		if (tc._conformance && dbAccess) {
+		if (tc._conformance && access) {
 			result = tc._descriptor
-				? validateByDictionary(tc._value, tc._descriptor, dbAccess, {})
-				: validateConformance(tc._value, dataSection, [], dbAccess, {});
+				? validateByDictionary(tc._value, tc._descriptor, access, {})
+				: validateConformance(tc._value, dataSection, [], access, {});
 		} else {
-			result = validateValue(tc._value, dataSection, dbAccess, {});
+			result = validateValue(tc._value, dataSection, access, {});
 		}
 		const errors = result.errors || [];
 		const actual = errors.length === 0 ? 'pass' : 'fail';
@@ -199,6 +214,26 @@ function runFile(filePath) {
 					status: 'fail',
 					reason: 'missing expected error code(s): ' + missing.join(', ') +
 					        '  (got: ' + [...actualCodes].join(', ') + ')',
+				});
+				continue;
+			}
+		}
+
+		// Optional warnings check: listed codes must all appear; an empty list
+		// means no warning at all. Warnings never decide pass/fail.
+		if (Array.isArray(tc._warnings)) {
+			const warnCodes = new Set((result.warnings || []).map(w => w.code));
+			const missing   = tc._warnings.filter(c => !warnCodes.has(c));
+			if (tc._warnings.length === 0 && warnCodes.size > 0) {
+				results.push({ label, status: 'fail', reason: 'expected no warnings but got: ' + [...warnCodes].join(', ') });
+				continue;
+			}
+			if (missing.length > 0) {
+				results.push({
+					label,
+					status: 'fail',
+					reason: 'missing expected warning code(s): ' + missing.join(', ') +
+					        '  (got: ' + ([...warnCodes].join(', ') || 'none') + ')',
 				});
 				continue;
 			}
