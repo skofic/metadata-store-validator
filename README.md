@@ -23,7 +23,8 @@ lib/                — the validator library (pure; Node + Foxx)
   snapshot.js       — makeSnapshotDbAccess: dbAccess over a pre-fetched dictionary snapshot
   edge-index.js     — enumeration and rule-edge lookups shared by both Node adapters
   units.js          — unit physical bounds (unit_range) and checkUnitBounds
-  compute.js        — resolve computed properties (_key, _gid, _aid) for terms, edges, and blobs
+  compute.js        — resolve computed properties: the schema-driven driver over compute-registry.js
+  compute-registry.js — the compute functions behind every `_computed` declaration, keyed schema → property
   md5.js            — MD5 shim: Node `crypto`, or `@arangodb/crypto` under Foxx
   coerce.js         — type coercion before strict validation
   errors.js         — error codes, makeError(), WARNING_CODES, partitionFindings()
@@ -150,7 +151,7 @@ const result = validateValue(
 
 ### `validateDocument(doc, descriptor, dbAccess, opts)`
 
-Resolves computed properties then validates a single **term** document against a descriptor's `_data` section. Mutates `doc` in place to add computed fields. Returns `{ errors, warnings, coercions }`; compute warnings (e.g. `COMPUTE_ADDED`) appear in `warnings`.
+Resolves computed properties then validates a single document — a term, an edge, a link, a blob, or any object whose descriptor declares `_computed` — against the descriptor's `_data` section. Mutates `doc` in place to add computed fields (see *Computed properties* below). Returns `{ errors, warnings, coercions, computed }`; compute warnings (e.g. `COMPUTE_ADDED`) appear in `warnings`, and `computed` lists every fill as `{ path, value }`.
 
 ```js
 const doc = { _code: { _nid: 'ISO_3166', _lid: 'ITA' } };
@@ -231,6 +232,34 @@ It returns `{ errors, warnings, skipped }`; each finding carries `gid`, `which` 
 Authoring check: reports `UNIT_RANGE_CONFLICT` when a descriptor's declared `_range_valid` or `_range_normal` reaches beyond the physical bound of the unit it selects (or cannot overlap it). The CLI runs it on every term in term mode.
 
 ---
+
+### `applyComputed(doc, descriptorGid, dbAccess, opts)` / `checkComputeRegistry(dbAccess)` — computed properties
+
+A schema body declares which of its properties the system supplies (`_computed`). The functions behind those declarations live in `lib/compute-registry.js`, keyed the way the dictionary declares them — by the schema term, then the property:
+
+| Declaration | Rule |
+|---|---|
+| `_code._gid` | `_nid` absent → `_lid`; `""` → `"_" + _lid`; else `_nid + "_" + _lid` |
+| `_code._aid` | the stored list ∪ `[_lid]` (merge) |
+| `_term._key` | `_code._gid` |
+| `_edge._key`, `_link._key` | `LOWER(MD5(_from + "/" + _predicate + "/" + _to))` — handles must be resolved first |
+| `_blob._key` | `LOWER(MD5(_blob_item + "/" + _blob_type + "/" + _blob_kind + "/" + _blob_identifier))` |
+| `_domn._term_role` | the derived roles (descriptor, namespace, predicate, enum-root, enum-item, enum-source) recomputed from the term and the graph; user-assigned roles and `_term_role_system` kept as found (merge) |
+
+```js
+const { applyComputed } = require('metadata-store-validator');
+
+const doc = { _code: { _nid: 'chr', _lid: 'NewVariable' }, _info: { … }, _data: { _scalar: { _number_float: {} } } };
+const { errors, warnings, computed } = applyComputed(doc, '_term', dbAccess, { quietCompute: true });
+// doc now carries _code._gid, _code._aid, _key and _domn._term_role;
+// computed: [{ path: '_code._gid', value: 'chr_NewVariable' }, …]
+```
+
+With a `dbAccess` the walk is **schema-driven**: the descriptor's body is read from the dictionary, containers are computed before their parent, a container the document lacks is created when its schema declares computed properties (a new term gets its `_domn`), and a declared property with no registered function is reported as `NO_COMPUTE_FUNCTION`. Without a `dbAccess` the fixed core layout is used (terms, edges/links, blobs), which is what the historical `compute.computeTermCode` / `computeEdgeKey` / `computeBlobKey` wrappers do.
+
+Absent values are filled and reported as `COMPUTE_ADDED` (a warning, an error under `strictCompute`, silent under `quietCompute`, reported without filling under `noFill`). A present value that disagrees is `COMPUTE_MISMATCH` and is never repaired — except for the two **merge** entries (`_aid`, `_term_role`), whose stale stored value is filled and reported as `COMPUTE_ADDED`. `_term_role` needs five optional `dbAccess` facts (see the contract below); when the accessor cannot answer them the stored roles are left alone.
+
+`checkComputeRegistry(dbAccess)` compares every `_computed` declaration in the dictionary with the registry, both ways, and returns the differences as strings (the CLI prints them at start-up). It needs `dbAccess.listComputedDeclarations()`.
 
 ### `formFields(body)` / `checkFields(body, path)` — the presentation list
 
@@ -495,7 +524,8 @@ Every error and warning has the same shape:
 | `INVALID_TYPEDEF` | The typedef term has no usable `_data` section |
 | `MISSING_FIELD` | A field required for property computation is absent |
 | `COMPUTE_MISMATCH` | A computed property is present but its value disagrees with the computed result |
-| `COMPUTE_ADDED` | **Warning** — a computed property was absent; the computed value was added (or should be added) |
+| `COMPUTE_ADDED` | **Warning** — a computed property was absent (or stale, for the merge entries `_aid` / `_term_role`); the computed value was added (or should be added) |
+| `NO_COMPUTE_FUNCTION` | A schema body declares a property `_computed` but the compute registry has no function for it |
 
 ---
 
@@ -548,6 +578,18 @@ const dbAccess = {
 
   // "<termsCollection>/<gid>" — the handle form used as _path_data keys.
   makeHandle(gid) { return 'terms/' + gid; },
+
+  // Optional — the facts _domn._term_role is computed from (applyComputed). An
+  // accessor without them leaves stored roles alone. Answer null for "unknown".
+  isPathRoot(gid)    { /* handle in the _path of an enum-of / section-of / bridge-of edge */ return true; },
+  isEnumItem(gid)    { /* _from of an enum-of edge, or an alias bridge node */ return true; },
+  isNamespace(gid)   { /* some term's _code._nid */ return true; },
+  isPredicate(gid)   { /* some edge's or link's _predicate */ return true; },
+  isEnumSource(gid)  { /* named in some _enums array */ return true; },
+
+  // Optional — [{ gid, computed[] }] for every schema body declaring _computed;
+  // used by checkComputeRegistry().
+  listComputedDeclarations() { /* ... */ return []; },
 
 };
 ```

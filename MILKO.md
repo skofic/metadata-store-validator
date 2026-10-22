@@ -223,15 +223,20 @@ node bin/validate.js --compute --no-fill --credentials … ../metadata-store/dat
 node bin/validate.js --persist --resolve-handles --credentials … ../metadata-store/data/core/
 ```
 
-### Computed properties by document type
+### Computed properties — the registry
 
-| Document type | Detection | Computed property | Formula |
-|--------------|-----------|-------------------|---------|
-| Term | has `_code` | `_code._gid` | `_nid + "_" + _lid` (see rules below) |
-| Term | has `_code` | `_key` | same as `_gid` |
-| Term | has `_code` | `_code._aid` | must contain `_lid` |
-| Edge | has `_predicate` | `_key` | `LOWER(MD5(_from + "/" + _predicate + "/" + _to))` |
-| Blob | has `_blob_item` | `_key` | `LOWER(MD5(_blob_item + "/" + _blob_type + "/" + _blob_kind + "/" + _blob_identifier))` |
+The rules live in `lib/compute-registry.js`, keyed by the schema term whose body declares the property (`_computed`) and by the property; `lib/compute.js` is the driver. With a database the driver reads the descriptor's body and walks the document bottom-up (containers first, so `_code._gid` exists before `_term._key` asks for it); a container the document lacks is created when its schema declares computed properties; a declaration with no function is `NO_COMPUTE_FUNCTION`. Without a database the fixed core layout below is used, chosen by the descriptor or by document shape.
+
+| Declaration | Formula |
+|---|---|
+| `_code._gid` | `_nid + "_" + _lid` (see rules below) |
+| `_code._aid` | must contain `_lid` (merge: filled, not a mismatch) |
+| `_term._key` | same as `_gid` |
+| `_edge._key`, `_link._key` | `LOWER(MD5(_from + "/" + _predicate + "/" + _to))` |
+| `_blob._key` | `LOWER(MD5(_blob_item + "/" + _blob_type + "/" + _blob_kind + "/" + _blob_identifier))` |
+| `_domn._term_role` | the five `assign-roles` rules (derived roles recomputed; user-assigned roles and `_term_role_system` kept) — needs the optional `dbAccess` facts `isPathRoot`, `isEnumItem`, `isNamespace`, `isPredicate`, `isEnumSource` |
+
+The CLI cross-checks the registry against every `_computed` declaration at start-up (`checkComputeRegistry`) and warns on a difference in either direction. `test/compute-db.test.js` recomputes `_term_role` for every term of the live dictionary and requires the same answer `assign-roles` stored — the two implementations must agree.
 
 **`_gid` computation rules:**
 
@@ -380,7 +385,8 @@ All error codes are defined in `lib/errors.js`:
 | `INVALID_TYPEDEF` | The typedef term has no usable `_data` section |
 | `MISSING_FIELD` | A field required for property computation is absent |
 | `COMPUTE_MISMATCH` | Existing computed value differs from the expected value |
-| `COMPUTE_ADDED` | Computed `_gid` was missing from `_aid` and was added (warning) |
+| `COMPUTE_ADDED` | A computed property was absent or stale and was filled (warning) |
+| `NO_COMPUTE_FUNCTION` | A schema body declares a computed property the registry has no function for |
 
 ---
 

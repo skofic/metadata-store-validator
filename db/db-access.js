@@ -17,7 +17,8 @@
 const request                  = require('sync-request');
 const LRUCache                 = require('./lru-cache');
 const queries                  = require('./queries');
-const { makeEdgeBackedAccess } = require('../lib/edge-index');
+const { makeEdgeBackedAccess,
+        collectEnumSources }   = require('../lib/edge-index');
 
 /**
  * Build a synchronous dbAccess object.
@@ -39,6 +40,7 @@ function makeDbAccess(credentials, cacheSize, collections) {
 	const cols     = Object.assign({}, credCols, collections || {});
 	const termsCol = cols.terms || 'terms';
 	const edgesCol = cols.edges || 'edges';
+	const linksCol = cols.links || 'links';
 
 	const termCache = new LRUCache(cacheSize || 500);
 
@@ -62,11 +64,26 @@ function makeDbAccess(credentials, cacheSize, collections) {
 		return result;
 	}
 
+	// The links collection is optional (a database may carry only edges).
+	function predicatesIncludingLinks() {
+		try { return aqlQuery(queries.predicatesQuery(edgesCol, linksCol)); }
+		catch (_) { return aqlQuery(queries.predicatesQuery(edgesCol, null)); }
+	}
+
 	return makeEdgeBackedAccess({
 		termsCol,
 		enumEdges:       aqlQuery(queries.enumEdgesQuery(edgesCol)),
 		propertyOfRules: aqlQuery(queries.propertyOfRulesQuery(edgesCol)),
 		valueOfRules:    aqlQuery(queries.valueOfRulesQuery(edgesCol)),
+		// The three dictionary-wide facts behind _domn._term_role (one query each).
+		namespaces:      aqlQuery(queries.namespacesQuery(termsCol)),
+		predicates:      predicatesIncludingLinks(),
+		enumSources:     collectEnumSources(aqlQuery(queries.dataSectionsQuery(termsCol))),
+
+		/** Every schema body declaring computed properties — for the CLI's registry cross-check. */
+		listComputedDeclarations: function() {
+			return aqlQuery(queries.computedDeclarationsQuery(termsCol));
+		},
 
 		/**
 		 * Returns the full term document for the given _gid, or null if not found.

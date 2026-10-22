@@ -7,7 +7,9 @@
  *           validateByDictionary, validateConformance } = require('metadata-store-validator');
  *
  * Also exposed for tooling that needs them (loaders, the CLI, Foxx adapters):
- *   compute      — computeTermCode / computeEdgeKey / computeBlobKey / applyCompute …
+ *   compute      — applyComputed / checkComputeRegistry, plus the historical
+ *                  computeTermCode / computeEdgeKey / computeBlobKey wrappers
+ *   computeRegistry — the per-schema compute functions behind `_computed`
  *   ANCHOR       — the three type-vocabulary anchor GIDs the engine reads by name
  *   errors       — ErrorCode table + makeError
  *   makeDbAccess — the Node (HTTP) dbAccess adapter; requires the optional
@@ -16,10 +18,11 @@
 
 const lib      = require('./lib');
 const compute  = require('./lib/compute');
+const computeRegistry = require('./lib/compute-registry');
 const errors   = require('./lib/errors');
 const { ANCHOR } = require('./lib/type-registry');
 
-const api = Object.assign({}, lib, { compute, errors, ANCHOR });
+const api = Object.assign({}, lib, { compute, computeRegistry, errors, ANCHOR });
 
 // Lazy: `db/db-access.js` pulls in the optional `sync-request` dependency, which
 // Foxx bundles omit. A getter on the exports object keeps it out of the load

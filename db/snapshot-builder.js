@@ -34,6 +34,7 @@
  * fatal.
  */
 
+const { collectEnumSources } = require('../lib/edge-index');
 const queries    = require('./queries');
 const { ANCHOR } = require('../lib/type-registry');
 
@@ -131,6 +132,16 @@ async function buildSnapshot(params) {
 	const propertyOfRules = await run(queries.propertyOfRulesQuery(edgesCol));
 	const valueOfRules    = await run(queries.valueOfRulesQuery(edgesCol));
 
+	// The dictionary-wide facts _domn._term_role is computed from. Cheap (one
+	// query each, a few hundred rows), and without them a snapshot accessor
+	// answers null and the roles are simply not recomputed.
+	const linksCol    = p.linksCol || 'links';
+	const namespaces  = await run(queries.namespacesQuery(termsCol));
+	let predicates;
+	try { predicates = await run(queries.predicatesQuery(edgesCol, linksCol)); }
+	catch (_) { predicates = await run(queries.predicatesQuery(edgesCol, null)); }
+	const enumSources = collectEnumSources(await run(queries.dataSectionsQuery(termsCol)));
+
 	return {
 		version:  1,
 		termsCol,
@@ -141,6 +152,9 @@ async function buildSnapshot(params) {
 		enumEdges,
 		propertyOfRules,
 		valueOfRules,
+		namespaces,
+		predicates,
+		enumSources,
 	};
 }
 

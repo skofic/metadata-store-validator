@@ -29,7 +29,8 @@
  *   --cache-size <n>     LRU cache size for term lookups (default: 500)
  *   --strict             UNKNOWN_PROPERTY is an error (default for named modes)
  *   --lenient            UNKNOWN_PROPERTY is a warning
- *   --compute            Fill in _key, _gid, _aid from _nid+_lid; warn when absent
+ *   --compute            Fill every computed property the schema declares (_key, _gid,
+ *                        _aid, and _term_role when the database is reachable); warn when absent
  *   --strict-compute     Absent computed properties are errors instead of warnings
  *   --quiet-compute      Fill in computed properties silently (no warning)
  *   --no-fill            Report absent computed properties without filling them in
@@ -68,6 +69,19 @@ const { ANCHOR }               = require('../lib/type-registry');
  *
  * @param {Object} dbAccess - DB accessor exposing getTerm(gid).
  */
+/**
+ * Warn when the dictionary's `_computed` declarations and the compute registry
+ * disagree, in either direction — a declared property nothing computes would
+ * otherwise surface only as NO_COMPUTE_FUNCTION on the first document.
+ */
+function checkComputeDeclarations(dbAccess) {
+	const problems = checkComputeRegistry(dbAccess);
+	if (problems.length > 0) {
+		console.error('WARNING: computed-property declarations and the compute registry disagree:');
+		for (const p of problems) console.error('         ' + p);
+	}
+}
+
 function checkAnchorRoles(dbAccess) {
 	const problems = [];
 	for (const gid of Object.values(ANCHOR)) {
@@ -86,7 +100,7 @@ function checkAnchorRoles(dbAccess) {
 	}
 }
 const { validateByDictionary, checkUnitBounds, createReport } = require('../lib');
-const { computeTermCode, computeEdgeKey, computeBlobKey } = require('../lib/compute');
+const { applyComputed, checkComputeRegistry } = require('../lib/compute');
 
 // Load a credentials file, following a one-hop `use` pointer if present.
 // A pointer file is JSON like { "use": "db.credentials.local.json" }; it names a
@@ -331,14 +345,11 @@ function parseArgs(argv) {
 }
 
 // Apply compute phase: verify / fill computed properties.
-// Terms  → _key, _gid, _aid (from _nid+_lid).
-// Edges  → _key (from MD5 of _from/_predicate/_to; handles must be resolved first).
-// Returns { errors, warnings }, or empty arrays for unrecognised doc types.
-function applyCompute(doc, opts) {
-	if (doc && doc._code)       return computeTermCode(doc, opts);
-	if (doc && doc._predicate)  return computeEdgeKey(doc, opts);
-	if (doc && doc._blob_item)  return computeBlobKey(doc, opts);
-	return { errors: [], warnings: [] };
+// Schema-driven through the compute registry: every `_computed` declaration
+// of the file's descriptor (and of the containers inside it) is honoured, and a
+// declaration with no registered function is reported as NO_COMPUTE_FUNCTION.
+function applyCompute(doc, descriptorGid, dbAccess, opts) {
+	return applyComputed(doc, descriptorGid, dbAccess, opts);
 }
 
 // Apply --resolve-handles: expand bare GIDs to <termsCol>/<gid> in _from, _to, _path,
@@ -387,7 +398,7 @@ function usage() {
 		'  --cache-size <n>        LRU cache size for term lookups (default: 500)',
 		'  --strict                UNKNOWN_PROPERTY is an error (default for named modes)',
 		'  --lenient               UNKNOWN_PROPERTY is a warning',
-		'  --compute               Fill _key, _gid, _aid from _nid+_lid; warn when absent',
+		'  --compute               Fill every declared computed property (_key, _gid, _aid, _term_role); warn when absent',
 		'  --strict-compute        Absent computed properties are errors, not warnings',
 		'  --quiet-compute         Fill in computed properties silently (no warning)',
 		'  --no-fill               Report absent computed properties without filling them in',
@@ -479,6 +490,8 @@ function main() {
 	const dbAccess = makeDbAccess(credentials, args.cacheSize, cols);
 
 	checkAnchorRoles(dbAccess);
+
+	checkComputeDeclarations(dbAccess);
 
 	const excluded = args.exclude.map(function(p) { return path.resolve(p); });
 	const files    = collectJsonFiles(path.resolve(args.target), excluded);
@@ -578,7 +591,7 @@ function main() {
 			// Handles must be resolved before compute so edge _key MD5 uses full handles.
 			if (args.resolveHandles) applyHandles(doc, effectiveTermsCol);
 			const computeResult = args.compute
-				? applyCompute(doc, {
+				? applyCompute(doc, descriptor, dbAccess, {
 					noFill:        args.noFill,
 					quietCompute:  args.quietCompute,
 					strictCompute: args.strictCompute,

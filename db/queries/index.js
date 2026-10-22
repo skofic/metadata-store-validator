@@ -115,7 +115,59 @@ function enumEdgesForRootsQuery(edgesCol, rootHandles) {
 	};
 }
 
+/**
+ * The three dictionary-wide facts _term_role is computed from (see
+ * lib/compute-registry.js). Each is one query, run once per accessor.
+ */
+function namespacesQuery(termsCol) {
+	return {
+		query: 'FOR t IN @@terms FILTER t._code._nid != null AND t._code._nid != "" COLLECT n = t._code._nid RETURN n',
+		bindVars: { '@terms': termsCol },
+	};
+}
+
+/** Every _predicate used by an edge or a link. `linksCol` may be null. */
+function predicatesQuery(edgesCol, linksCol) {
+	if (!linksCol) {
+		return { query: 'FOR e IN @@edges COLLECT p = e._predicate RETURN p', bindVars: { '@edges': edgesCol } };
+	}
+	return {
+		query:
+			'LET a = (FOR e IN @@edges COLLECT p = e._predicate RETURN p)' +
+			' LET b = (FOR l IN @@links COLLECT p = l._predicate RETURN p)' +
+			' FOR p IN UNION_DISTINCT(a, b) RETURN p',
+		bindVars: { '@edges': edgesCol, '@links': linksCol },
+	};
+}
+
+/** The _data section of every descriptor, for collectEnumSources(). */
+function dataSectionsQuery(termsCol) {
+	return {
+		query: 'FOR t IN @@terms FILTER t._data != null RETURN t._data',
+		bindVars: { '@terms': termsCol },
+	};
+}
+
+/**
+ * Every schema body that declares computed properties: { gid, computed[] }.
+ * Used by the CLI start-up cross-check against the compute registry.
+ */
+function computedDeclarationsQuery(termsCol) {
+	return {
+		query:
+			'FOR t IN @@terms' +
+			'  LET body = t._data._object._closed != null ? t._data._object._closed : t._data._object._open' +
+			'  FILTER body != null AND IS_ARRAY(body._computed) AND LENGTH(body._computed) > 0' +
+			'  RETURN { gid: t._key, computed: body._computed }',
+		bindVars: { '@terms': termsCol },
+	};
+}
+
 module.exports = {
+	namespacesQuery,
+	predicatesQuery,
+	dataSectionsQuery,
+	computedDeclarationsQuery,
 	enumEdgesQuery,
 	propertyOfRulesQuery,
 	valueOfRulesQuery,
