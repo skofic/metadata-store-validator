@@ -232,6 +232,24 @@ Authoring check: reports `UNIT_RANGE_CONFLICT` when a descriptor's declared `_ra
 
 ---
 
+### `formFields(body)` / `checkFields(body, path)` — the presentation list
+
+A schema body (the content of `_open` or `_closed`) may carry `_fields`: an ordered list with one entry per property, stating the order a form presents the properties in, the panel each belongs to (`_group`, default `_group_main`) and whether the property is indexed in the collection holding the object (`_index`). The rule lists decide presence and mode; `_fields` only adds presentation.
+
+```js
+const { formFields } = require('metadata-store-validator');
+
+const { fallback, fields } = formFields(codeTerm._data._object._closed);
+// fallback: false (the body carries _fields)
+// fields[0]: { gid: '_nid', group: '_group_main', index: '_index_identity',
+//              required: false, selector: null, computed: false, locked: false,
+//              immutable: true, default: undefined }
+```
+
+The order rule has one implementation, shared by a form builder, the `/ui` `GET /fields/:gid` route and an index generator: `_fields` order first, then any `_required` or `_recommended` property it left out, in required-then-recommended order; a body without `_fields` returns the whole list as that fallback (`fallback: true`). `required` is true only for a member of an unconditional `_all {}` selector; a property that belongs to a choice (`_any`, or `_all` with counts) carries `selector: { id, kind, min, max, group? }` instead, so the members of one selector can be rendered together as one choice.
+
+`checkFields` is the authoring check the conformance validator runs on every validated body that carries `_fields`: `FIELD_NOT_IN_SCHEMA` and `FIELD_BANNED` are errors, `FIELDS_INCOMPLETE` is a warning. Entry shape, descriptor existence and duplicate `_field` values are the ordinary `_objects` validation of the `_fields` term.
+
 ## Unit physical bounds (`unit_range`)
 
 A unit term may carry `_prop.unit_range`, a `_range` object stating a bound no value in that unit can cross — kelvin ≥ 0, °C ≥ −273.15, percent 0…100. When a numeric descriptor selects such a unit via `_unit`, a value must satisfy **both** the descriptor's `_range_valid` and the unit's bound (their intersection). A breach of the unit bound is a `RANGE_VIOLATION` whose message names the unit. Without a `dbAccess` the unit term cannot be read and the bound is not checked.
@@ -470,6 +488,9 @@ Every error and warning has the same shape:
 | `INVALID_GEOJSON_TYPE` | GeoJSON object's `type` field is not in the `_type_GeoJSON` allowed set |
 | `INVALID_GEOJSON` | GeoJSON structure or coordinates are malformed (RFC 7946 / S2) |
 | `INVALID_GEOJSON_WINDING` | A polygon ring winds the wrong way; S2 would index the complement of the intended area |
+| `FIELD_NOT_IN_SCHEMA` | A `_fields` entry places a property the schema body does not admit (not in `_required`, `_recommended`, `_computed`, `_locked` or `_immutable`) |
+| `FIELD_BANNED` | A `_fields` entry places a property the schema body bans |
+| `FIELDS_INCOMPLETE` | **Warning** — a `_required` or `_recommended` property is not placed by `_fields`; it is presented last |
 | `TYPEDEF_NOT_FOUND` | `_typedef` value does not match any term `_gid` |
 | `INVALID_TYPEDEF` | The typedef term has no usable `_data` section |
 | `MISSING_FIELD` | A field required for property computation is absent |

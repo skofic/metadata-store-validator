@@ -110,6 +110,10 @@ Term documents are fetched on demand by `getTerm(gid)` and cached with an LRU ca
 4. **Applies value-of rules** — when `_target` is present on the edge, the rule is directed at a specific sub-property of the object (target-scoped rule) rather than the whole object. Target-scoped rules replace dictionary validation for their targeted property.
 5. **Recurses** into `_object`, `_array` (element type `_object`), `_dict` (value type `_object`), `_typedef`, and `_keyed` sub-shapes.
 
+### `_fields` check (`lib/fields.js`)
+
+A schema body may carry `_fields`, the ordered presentation list (order, `_group` panel, `_index` intent) a form builder reads. The conformance validator anchors it by name: when the object being validated carries a `_fields` key — i.e. a body is being validated against `_rule` — `checkFields(body, path)` runs beside the ordinary `_objects` validation of the list and reports `FIELD_NOT_IN_SCHEMA` / `FIELD_BANNED` (errors) and `FIELDS_INCOMPLETE` (warning). The same module exports `formFields(body)`, the single implementation of the order rule (`_fields`, then the uncovered `_required`/`_recommended` members; `fallback: true` without `_fields`) consumed by the `/ui` service's `GET /fields/:gid`. `allowedProperties(body)` is the whitelist union both `object.js` and `fields.js` use, so the closed-schema check and the `_fields` check cannot drift apart.
+
 ### LRU cache
 
 Term documents are cached by `_gid` after first fetch. Not-found terms are cached as `null` to avoid repeated DB queries for missing dictionary entries. Default cache size is 500 entries; use `--cache-size` to adjust.
@@ -369,6 +373,9 @@ All error codes are defined in `lib/errors.js`:
 | `UNIMPLEMENTED_SHAPE` | The dictionary declares a shape or scalar type this validator has no implementation for |
 | `MIN_ITEMS` | Array or set has fewer elements than `_min-items` |
 | `MAX_ITEMS` | Array or set has more elements than `_max-items` |
+| `FIELD_NOT_IN_SCHEMA` | `_fields` entry names a property the body does not admit |
+| `FIELD_BANNED` | `_fields` entry names a property the body bans |
+| `FIELDS_INCOMPLETE` | A `_required` / `_recommended` property is not placed by `_fields` (**warning**) |
 | `TYPEDEF_NOT_FOUND` | `_typedef` value does not match any term `_gid` |
 | `INVALID_TYPEDEF` | The typedef term has no usable `_data` section |
 | `MISSING_FIELD` | A field required for property computation is absent |

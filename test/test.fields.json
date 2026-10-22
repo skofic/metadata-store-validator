@@ -1,0 +1,107 @@
+[
+	{
+		"_label": "_fields: a complete, admitted list validates with no warning",
+		"_db": true,
+		"_conformance": true,
+		"_descriptor": "_object",
+		"_value": {
+			"_closed": {
+				"_required": [{ "_selectors": [{ "_all": {} }], "_selection": ["_lid"] }],
+				"_recommended": ["_nid", "_emoji"],
+				"_fields": [
+					{ "_field": "_nid", "_index": "_index_identity" },
+					{ "_field": "_lid" },
+					{ "_field": "_emoji", "_group": "_group_more" }
+				]
+			}
+		},
+		"_expect": "pass",
+		"_warnings": []
+	},
+	{
+		"_label": "_fields: placing a property the body does not admit fails FIELD_NOT_IN_SCHEMA",
+		"_db": true,
+		"_conformance": true,
+		"_descriptor": "_object",
+		"_value": {
+			"_closed": {
+				"_required": [{ "_selectors": [{ "_all": {} }], "_selection": ["_lid"] }],
+				"_fields": [
+					{ "_field": "_lid" },
+					{ "_field": "_emoji" }
+				]
+			}
+		},
+		"_expect": "fail",
+		"_codes": ["FIELD_NOT_IN_SCHEMA"]
+	},
+	{
+		"_label": "_fields: placing a banned property fails FIELD_BANNED",
+		"_db": true,
+		"_conformance": true,
+		"_descriptor": "_object",
+		"_value": {
+			"_open": {
+				"_recommended": ["_lid"],
+				"_banned": ["_emoji"],
+				"_fields": [
+					{ "_field": "_lid" },
+					{ "_field": "_emoji" }
+				]
+			}
+		},
+		"_expect": "fail",
+		"_codes": ["FIELD_BANNED"]
+	},
+	{
+		"_label": "_fields: leaving a recommended property out passes with FIELDS_INCOMPLETE",
+		"_db": true,
+		"_conformance": true,
+		"_descriptor": "_object",
+		"_value": {
+			"_closed": {
+				"_required": [{ "_selectors": [{ "_all": {} }], "_selection": ["_lid"] }],
+				"_recommended": ["_nid", "_emoji"],
+				"_fields": [
+					{ "_field": "_nid" },
+					{ "_field": "_lid" }
+				]
+			}
+		},
+		"_expect": "pass",
+		"_warnings": ["FIELDS_INCOMPLETE"]
+	},
+	{
+		"_label": "_fields: the same property placed twice fails DUPLICATE_VALUE (the _objects _unique rule)",
+		"_db": true,
+		"_conformance": true,
+		"_descriptor": "_object",
+		"_value": {
+			"_closed": {
+				"_required": [{ "_selectors": [{ "_all": {} }], "_selection": ["_lid"] }],
+				"_fields": [
+					{ "_field": "_lid" },
+					{ "_field": "_lid" }
+				]
+			}
+		},
+		"_expect": "fail",
+		"_codes": ["DUPLICATE_VALUE"]
+	},
+	{
+		"_label": "_fields: an unknown _group member fails INVALID_ENUM",
+		"_db": true,
+		"_conformance": true,
+		"_descriptor": "_object",
+		"_value": {
+			"_closed": {
+				"_required": [{ "_selectors": [{ "_all": {} }], "_selection": ["_lid"] }],
+				"_fields": [
+					{ "_field": "_lid", "_group": "_group_expert" }
+				]
+			}
+		},
+		"_expect": "fail",
+		"_codes": ["INVALID_ENUM"]
+	}
+]
