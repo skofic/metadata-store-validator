@@ -30,7 +30,7 @@
  *   --strict             UNKNOWN_PROPERTY is an error (default for named modes)
  *   --lenient            UNKNOWN_PROPERTY is a warning
  *   --compute            Fill every computed property the schema declares — each `_computed`
- *                        entry interpreted by its kind; legacy gid entries still accepted — (_key, _gid,
+ *                        entry interpreted by its kind — (_key, _gid,
  *                        _aid, and _term_role when the database is reachable); warn when absent
  *   --strict-compute     Absent computed properties are errors instead of warnings
  *   --quiet-compute      Fill in computed properties silently (no warning)

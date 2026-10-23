@@ -67,7 +67,7 @@ function collectRefs(node, addTerm, addRoot) {
 		} else if (SCHEMA_LISTS.has(key)) {
 			for (const gid of flattenStrings(value, [])) if (gid) addTerm(gid);
 		} else if (key === '_computed') {
-			// legacy gid strings, or entry objects naming the property in _field
+			// entry objects naming the property in _field
 			for (const gid of computedFields({ _computed: value })) addTerm(gid);
 		} else if (key === '_keyed' && value && typeof value === 'object' && !Array.isArray(value)) {
 			for (const sibling of Object.keys(value)) addTerm(sibling);

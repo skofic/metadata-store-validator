@@ -260,7 +260,7 @@ Paths in `_compute_from` are container-relative (`_scope_object` strings: `_lid`
 "_domn":  [ { "_field": "_term_role", "_compute_kind": "_compute_kind_rule", "_compute_rule": "_compute_rule_term-role" } ]
 ```
 
-**Transition.** A `_computed` entry may still be a bare property gid (the shape every body carried before v1.4.0); its rule is then the hand-written function in the legacy `REGISTRY` table of the same module. Both shapes may mix in one body. `computedFields(body)` / `computedEntry(body, gid)` (exported) read either shape and are what every consumer of the list uses. The legacy table goes once the dictionary carries object entries everywhere.
+**One shape.** Since v1.5.0 a `_computed` entry must be an entry object; a bare property gid — the shape every body carried before v1.4.0, accepted by v1.4.0 during the dictionary's switch — is reported as `INVALID_COMPUTE` and runs nothing. `computedFields(body)` / `computedEntry(body, gid)` (exported) read the entries and are what every consumer of the list uses.
 
 ```js
 const { applyComputed } = require('metadata-store-validator');
@@ -271,11 +271,11 @@ const { errors, warnings, computed } = applyComputed(doc, '_term', dbAccess, { q
 // computed: [{ path: '_code._gid', value: 'chr_NewVariable' }, …]
 ```
 
-With a `dbAccess` the walk is **schema-driven**: the descriptor's body is read from the dictionary, containers are computed before their parent, a container the document lacks is created when its schema declares computed properties (a new term gets its `_domn`), and an entry that cannot run is an error at the property's path — `NO_COMPUTE_FUNCTION` (a kind, digest or rule the interpreter does not implement, or a legacy gid with no function), `INVALID_COMPUTE` (a parameter missing or mistyped), `DUPLICATE_VALUE` (a repeated `_compute_from` path). Without a `dbAccess` the driver runs `CORE_DECLARATIONS` — the six declarations above, built in — over the fixed core layout (terms, edges/links, blobs); that is what the historical `compute.computeTermCode` / `computeEdgeKey` / `computeBlobKey` wrappers do.
+With a `dbAccess` the walk is **schema-driven**: the descriptor's body is read from the dictionary, containers are computed before their parent, a container the document lacks is created when its schema declares computed properties (a new term gets its `_domn`), and an entry that cannot run is an error at the property's path — `NO_COMPUTE_FUNCTION` (a kind, digest or rule the interpreter does not implement), `INVALID_COMPUTE` (a parameter missing or mistyped, or an entry that is not an object), `DUPLICATE_VALUE` (a repeated `_compute_from` path). Without a `dbAccess` the driver runs `CORE_DECLARATIONS` — the six declarations above, built in — over the fixed core layout (terms, edges/links, blobs); that is what the historical `compute.computeTermCode` / `computeEdgeKey` / `computeBlobKey` wrappers do.
 
 Absent values are filled and reported as `COMPUTE_ADDED` (a warning, an error under `strictCompute`, silent under `quietCompute`, reported without filling under `noFill`). Every computed value, written or not, is kept in a shadow keyed by document path, so under `noFill` `_term._key` is still reported from the `_code._gid` that was computed but not written. The term-role rule needs five optional `dbAccess` facts (see the contract below); when the accessor cannot answer them the stored roles are left alone.
 
-`checkComputeRegistry(dbAccess)` returns the differences between the dictionary's `_computed` declarations and what the code can run, as strings (the CLI prints them at start-up): every declared entry must resolve; every legacy function's property must be declared by its schema; and the built-in `CORE_DECLARATIONS` must match the dictionary — same computed fields per core schema and, where the dictionary already carries object entries, identical entries. It needs `dbAccess.listComputedDeclarations()`, which the Node HTTP adapter, a snapshot built since v1.4.0 and the Foxx adapter provide. (Before v1.4.0 the HTTP adapter dropped the method on its way through `makeEdgeBackedAccess`, so the check always reported nothing.)
+`checkComputeRegistry(dbAccess)` returns the differences between the dictionary's `_computed` declarations and what the code can run, as strings (the CLI prints them at start-up): every declared entry must resolve, and the built-in `CORE_DECLARATIONS` must match the dictionary — the same computed fields per core schema and identical entries (compared with sorted keys, since ArangoDB returns object keys sorted). It needs `dbAccess.listComputedDeclarations()`, which the Node HTTP adapter, a snapshot built since v1.4.0 and the Foxx adapter provide. (Before v1.4.0 the HTTP adapter dropped the method on its way through `makeEdgeBackedAccess`, so the check always reported nothing.)
 
 ### `formFields(body)` / `checkFields(body, path)` — the presentation list
 
@@ -291,7 +291,7 @@ const { fallback, fields } = formFields(codeTerm._data._object._closed);
 //              immutable: true, default: undefined }
 ```
 
-`computed` is true for a property a `_computed` entry derives (hidden on creation, read-only afterwards) — except a **constant**-kind entry, which is a pre-fill the user may change: it is reported with `computed: false` and its `_compute_value` in `default`. (The legacy `_default-value` map is still read for `default` until the term is retired.)
+`computed` is true for a property a `_computed` entry derives (hidden on creation, read-only afterwards) — except a **constant**-kind entry, which is a pre-fill the user may change: it is reported with `computed: false` and its `_compute_value` in `default`. (The retired `_default-value` map is no longer read.)
 
 The order rule has one implementation, shared by a form builder, the `/ui` `GET /fields/:gid` route and an index generator: `_fields` order first, then any `_required` or `_recommended` property it left out, in required-then-recommended order; a body without `_fields` returns the whole list as that fallback (`fallback: true`). `required` is true only for a member of an unconditional `_all {}` selector; a property that belongs to a choice (`_any`, or `_all` with counts) carries `selector: { id, kind, min, max, group? }` instead, so the members of one selector can be rendered together as one choice.
 
@@ -543,8 +543,8 @@ Every error and warning has the same shape:
 | `MISSING_FIELD` | A field required for property computation is absent |
 | `COMPUTE_MISMATCH` | A computed property is present but its value disagrees with the computed result |
 | `COMPUTE_ADDED` | **Warning** — a computed property was absent (or stale, for a merge kind: union, rule); the computed value was added (or should be added) |
-| `NO_COMPUTE_FUNCTION` | A `_computed` entry names a kind, digest or rule the interpreter does not implement, or a legacy gid no function exists for |
-| `INVALID_COMPUTE` | A `_computed` entry is malformed for its kind: a parameter missing or of the wrong type, an empty `_compute_from`, more than one path on a copy |
+| `NO_COMPUTE_FUNCTION` | A `_computed` entry names a kind, digest or rule the interpreter does not implement |
+| `INVALID_COMPUTE` | A `_computed` entry is malformed: not an entry object (a bare gid, the shape retired in v1.5.0), a parameter missing or of the wrong type, an empty `_compute_from`, more than one path on a copy |
 
 ---
 

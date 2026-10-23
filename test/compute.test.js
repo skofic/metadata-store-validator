@@ -9,9 +9,10 @@
  * fixture plus _term / _code / _domn / _info bodies, one namespace and one
  * enumeration — so the schema-driven walk can be exercised end to end.
  *
- * The bodies declare `_computed` in the legacy shape (gid strings); the
- * fallback path runs CORE_DECLARATIONS (the new entry objects), so the two
- * shapes are exercised side by side and must agree.
+ * The bodies declare `_computed` with the CORE_DECLARATIONS entry objects, so
+ * the schema-driven walk and the no-dictionary fallback run the same entries
+ * and must agree. Bare gid strings — the shape retired in v1.5.0 — are a
+ * negative case.
  */
 
 const assert = require('node:assert/strict');
@@ -21,7 +22,8 @@ const path   = require('path');
 const v = require('..');
 const { applyComputed, checkComputeRegistry } = v;
 const { computeTermCode, computeEdgeKey, computeBlobKey } = v.compute;
-const { lookup, computeGid, resolveEntry, CORE_DECLARATIONS } = v.computeRegistry;
+const { computeGid, resolveEntry, CORE_DECLARATIONS } = v.computeRegistry;
+const { md5 } = require('../lib/md5');
 const { collectEnumSources } = require('../lib/edge-index');
 
 let passed = 0;
@@ -44,11 +46,11 @@ function term(gid, data, roles) {
 const DICT = Object.assign({}, anchors, {
 	_term: term('_term', { _object: { _closed: {
 		_required: all(['_key', '_code']), _recommended: ['_info', '_data', '_domn'],
-		_computed: ['_key'], _immutable: ['_key'], _locked: ['_id', '_rev'] } } }),
+		_computed: CORE_DECLARATIONS._term, _immutable: ['_key'], _locked: ['_id', '_rev'] } } }),
 	_code: term('_code', { _object: { _closed: {
 		_required: all(['_lid', '_gid', '_aid']), _recommended: ['_nid', '_emoji'],
-		_computed: ['_gid', '_aid'], _immutable: ['_nid', '_lid', '_gid'] } } }),
-	_domn: term('_domn', { _object: { _open: { _recommended: ['_term_role'], _computed: ['_term_role'] } } }),
+		_computed: CORE_DECLARATIONS._code, _immutable: ['_nid', '_lid', '_gid'] } } }),
+	_domn: term('_domn', { _object: { _open: { _recommended: ['_term_role'], _computed: CORE_DECLARATIONS._domn } } }),
 	_info: term('_info', { _object: { _closed: { _required: all(['_title']) } } }),
 	_key: term('_key', { _scalar: { _string: {} } }), _lid: term('_lid', { _scalar: { _string: {} } }),
 	_gid: term('_gid', { _scalar: { _string: {} } }), _aid: term('_aid', { _set: { _string: {} } }),
@@ -73,17 +75,20 @@ test('computeGid: absent nid, empty nid, namespaced', () => {
 	assert.equal(computeGid('ISO_3166', 'ITA'), 'ISO_3166_ITA');
 });
 
+const coreRun = (schema, i, container, root) => resolveEntry(schema, CORE_DECLARATIONS[schema][i]).compute(container, root || container, { shadow: {}, containerPath: [] });
+
 test('_code._aid merges the local identifier into an existing list', () => {
-	assert.deepEqual(lookup('_code', '_aid').compute({ _lid: 'it', _aid: ['IT', '380'] }), ['IT', '380', 'it']);
-	assert.deepEqual(lookup('_code', '_aid').compute({ _lid: 'it', _aid: ['it'] }), ['it']);
-	assert.equal(lookup('_code', '_aid').compute({}), undefined);
+	assert.deepEqual(coreRun('_code', 1, { _lid: 'it', _aid: ['IT', '380'] }), ['IT', '380', 'it']);
+	assert.deepEqual(coreRun('_code', 1, { _lid: 'it', _aid: ['it'] }), ['it']);
+	assert.equal(coreRun('_code', 1, {}), undefined);
 });
 
 test('edge, link and blob keys are the loader\'s hashes', () => {
 	const e = { _from: 'terms/_scale_year', _predicate: '_predicate_enum-of', _to: 'terms/_scale' };
-	assert.equal(lookup('_edge', '_key').compute(e), lookup('_link', '_key').compute(e));
-	assert.match(lookup('_edge', '_key').compute(e), /^[0-9a-f]{32}$/);
-	assert.equal(lookup('_blob', '_key').compute({ _blob_item: 'flag', _blob_type: '_text_SVG', _blob_kind: '_media_landscape', _blob_identifier: 'ad' }),
+	assert.equal(coreRun('_edge', 0, e), coreRun('_link', 0, e));
+	assert.equal(coreRun('_edge', 0, e), md5('terms/_scale_year/_predicate_enum-of/terms/_scale'));
+	assert.match(coreRun('_edge', 0, e), /^[0-9a-f]{32}$/);
+	assert.equal(coreRun('_blob', 0, { _blob_item: 'flag', _blob_type: '_text_SVG', _blob_kind: '_media_landscape', _blob_identifier: 'ad' }),
 		'339d23fc1dbffe043bc69d6db95b5912');   // the Andorra landscape flag, as documented
 });
 
@@ -177,7 +182,8 @@ test('schema-driven: noFill reports without touching the document', () => {
 
 test('a declared computed property with no function is NO_COMPUTE_FUNCTION', () => {
 	const dict = Object.assign({}, DICT, { _code: term('_code', { _object: { _closed: {
-		_required: all(['_lid', '_gid', '_aid']), _recommended: ['_nid', '_emoji'], _computed: ['_gid', '_aid', '_emoji'] } } }) });
+		_required: all(['_lid', '_gid', '_aid']), _recommended: ['_nid', '_emoji'],
+		_computed: [...CORE_DECLARATIONS._code, { _field: '_emoji', _compute_kind: '_compute_kind_sparkle' }] } } }) });
 	const acc = v.makeSnapshotDbAccess(Object.assign({ version: 1, termsCol: 'terms', terms: dict, enumEdges: EDGES }, FACTS), { onMiss: 'null' });
 	const r = applyComputed({ _code: { _nid: 'ns', _lid: 'item' } }, '_term', acc, { quietCompute: true });
 	assert.equal(r.errors.length, 1);
@@ -185,17 +191,14 @@ test('a declared computed property with no function is NO_COMPUTE_FUNCTION', () 
 	assert.equal(r.errors[0].path, '_code._emoji');
 });
 
-test('checkComputeRegistry reports both directions', () => {
-	const ok = { listComputedDeclarations: () => [
-		{ gid: '_term', computed: ['_key'] }, { gid: '_code', computed: ['_gid', '_aid'] }, { gid: '_domn', computed: ['_term_role'] },
-		{ gid: '_edge', computed: ['_key'] }, { gid: '_link', computed: ['_key'] }, { gid: '_blob', computed: ['_key'] } ] };
-	assert.deepEqual(checkComputeRegistry(ok), []);
-	const off = { listComputedDeclarations: () => [{ gid: '_term', computed: ['_key'] }, { gid: '_code', computed: ['_gid', '_aid', '_emoji'] }] };
-	const problems = checkComputeRegistry(off);
-	assert.ok(problems.some(p => p.startsWith('_code._emoji: ') && p.includes('no function')));
-	assert.ok(problems.some(p => p.startsWith('_domn._term_role has a compute function')));
-	assert.ok(problems.some(p => p.startsWith('_code: the built-in fallback computes [_aid, _gid] but the dictionary declares [_aid, _emoji, _gid]')));
+test('checkComputeRegistry rejects the retired string shape and reports missing core schemas', () => {
+	const old = { listComputedDeclarations: () => [{ gid: '_term', computed: ['_key'] }, { gid: '_code', computed: ['_gid', '_aid', '_emoji'] }] };
+	const problems = checkComputeRegistry(old);
+	assert.ok(problems.some(p => p.startsWith('_term._key: ') && p.includes('bare gid')));
+	assert.ok(problems.some(p => p.startsWith('_code._emoji: ') && p.includes('bare gid')));
+	assert.ok(problems.some(p => p.startsWith('_code: the built-in fallback computes [_aid, _gid] but the dictionary declares []')));
 	assert.ok(problems.some(p => p.startsWith('_edge: the built-in fallback')));
+	assert.ok(problems.some(p => p.startsWith('_domn: the built-in fallback')));
 	assert.deepEqual(checkComputeRegistry({}), []);
 });
 
@@ -207,8 +210,10 @@ test('checkComputeRegistry accepts the new shape and catches a drifted core entr
 	const problems = checkComputeRegistry({ listComputedDeclarations: () => drifted });
 	assert.equal(problems.length, 1);
 	assert.ok(problems[0].startsWith('_edge._key: the built-in fallback'));
-	const mixed = rows.map(r => r.gid === '_code' ? { gid: '_code', computed: ['_gid', '_aid'] } : r);   // legacy gids on one body
-	assert.deepEqual(checkComputeRegistry({ listComputedDeclarations: () => mixed }), []);
+	const stale = rows.map(r => r.gid === '_code' ? { gid: '_code', computed: ['_gid', '_aid'] } : r);   // a body still on the retired shape
+	const staleProblems = checkComputeRegistry({ listComputedDeclarations: () => stale });
+	assert.equal(staleProblems.filter(p => p.includes('bare gid')).length, 2);
+	assert.ok(staleProblems.some(p => p.startsWith('_code: the built-in fallback')));
 	// ArangoDB returns object keys sorted: key order must not count as a difference
 	const sorted = rows.map(r => ({ gid: r.gid, computed: r.computed.map(e => Object.fromEntries(Object.keys(e).sort().map(k => [k, e[k]]))) }));
 	assert.deepEqual(checkComputeRegistry({ listComputedDeclarations: () => sorted }), []);
@@ -239,8 +244,8 @@ test('concat skips absent parts and keeps an empty-string part', () => {
 
 test('hash joins every part with the separator and digests it; a missing part yields nothing', () => {
 	const edge = { _from: 'terms/_scale_year', _predicate: '_predicate_enum-of', _to: 'terms/_scale' };
-	assert.equal(run('_edge', CORE_DECLARATIONS._edge[0], edge), lookup('_edge', '_key').compute(edge));
-	assert.equal(run('_link', CORE_DECLARATIONS._link[0], edge), lookup('_link', '_key').compute(edge));
+	assert.equal(run('_edge', CORE_DECLARATIONS._edge[0], edge), md5('terms/_scale_year/_predicate_enum-of/terms/_scale'));
+	assert.equal(run('_link', CORE_DECLARATIONS._link[0], edge), run('_edge', CORE_DECLARATIONS._edge[0], edge));
 	assert.equal(run('_edge', CORE_DECLARATIONS._edge[0], { _from: 'terms/a', _to: 'terms/b' }), undefined);
 	const blob = { _blob_item: 'flag', _blob_type: '_text_SVG', _blob_kind: '_media_landscape', _blob_identifier: 'ad' };
 	assert.equal(run('_blob', CORE_DECLARATIONS._blob[0], blob), '339d23fc1dbffe043bc69d6db95b5912');
@@ -267,7 +272,7 @@ test('constant fills only an absent property and is never a mismatch', () => {
 	const body = { _computed: [{ _field: 'status', _compute_kind: '_compute_kind_constant', _compute_value: { state: 'active' } }] };
 	const dict = Object.assign({}, DICT, {
 		_term: term('_term', { _object: { _closed: { _required: all(['_key', '_code']), _recommended: ['_info', 'status'],
-			_computed: ['_key', body._computed[0]], _immutable: ['_key'] } } }),
+			_computed: [...CORE_DECLARATIONS._term, body._computed[0]], _immutable: ['_key'] } } }),
 		status: term('status', { _object: {} }),
 	});
 	const acc = v.makeSnapshotDbAccess(Object.assign({ version: 1, termsCol: 'terms', terms: dict, enumEdges: EDGES }, FACTS), { onMiss: 'null' });
@@ -291,15 +296,16 @@ test('entries apply in list order and noFill still sees an unwritten value throu
 	assert.deepEqual(r.computed.map(c => c.path + '=' + JSON.stringify(c.value)), ['_code._gid="ns_item"', '_code._aid=["item"]', '_key="ns_item"']);
 });
 
-test('a mixed body — one legacy gid, one entry object — runs both', () => {
+test('a bare gid entry — the shape retired in v1.5.0 — is INVALID_COMPUTE and runs nothing; the object entry beside it still runs', () => {
 	const dict = Object.assign({}, DICT, { _code: term('_code', { _object: { _closed: {
 		_required: all(['_lid', '_gid', '_aid']), _recommended: ['_nid', '_emoji'],
 		_computed: ['_gid', CORE_DECLARATIONS._code[1]] } } }) });
 	const acc = v.makeSnapshotDbAccess(Object.assign({ version: 1, termsCol: 'terms', terms: dict, enumEdges: EDGES }, FACTS), { onMiss: 'null' });
 	const doc = { _code: { _nid: 'ns', _lid: 'item' } };
 	const r = applyComputed(doc, '_term', acc, { quietCompute: true });
-	assert.deepEqual(r.errors, []);
-	assert.deepEqual(doc._code, { _nid: 'ns', _lid: 'item', _gid: 'ns_item', _aid: ['item'] });
+	assert.deepEqual(r.errors.map(e => [e.code, e.path]), [['INVALID_COMPUTE', '_code._gid']]);
+	assert.deepEqual(doc._code, { _nid: 'ns', _lid: 'item', _aid: ['item'] });
+	assert.equal(resolveEntry('_code', '_gid').problem.code, 'INVALID_COMPUTE');
 });
 
 test('malformed entries: INVALID_COMPUTE, DUPLICATE_VALUE, NO_COMPUTE_FUNCTION', () => {
@@ -312,8 +318,8 @@ test('malformed entries: INVALID_COMPUTE, DUPLICATE_VALUE, NO_COMPUTE_FUNCTION',
 	assert.equal(bad({ _field: '_gid', _compute_kind: '_compute_kind_sha', _compute_from: ['_lid'] }).code, 'NO_COMPUTE_FUNCTION');
 	assert.equal(bad({ _field: '_key', _compute_kind: '_compute_kind_hash', _compute_from: ['a'], _compute_separator: '/', _compute_digest: '_compute_digest_sha1' }).code, 'NO_COMPUTE_FUNCTION');
 	assert.equal(bad({ _field: '_term_role', _compute_kind: '_compute_kind_rule', _compute_rule: '_compute_rule_nope' }).code, 'NO_COMPUTE_FUNCTION');
-	assert.equal(bad('_emoji').code, 'NO_COMPUTE_FUNCTION');
-	assert.equal(resolveEntry('_code', '_gid').problem, undefined);
+	assert.equal(bad('_emoji').code, 'INVALID_COMPUTE');   // a bare gid: the shape retired in v1.5.0
+	assert.equal(resolveEntry('_code', CORE_DECLARATIONS._code[0]).problem, undefined);
 	// through the driver the problem lands at the property's path
 	const dict = Object.assign({}, DICT, { _code: term('_code', { _object: { _closed: {
 		_required: all(['_lid', '_gid', '_aid']),

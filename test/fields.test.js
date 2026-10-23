@@ -22,7 +22,8 @@ const all = function(selection) { return { _selectors: [{ _all: {} }], _selectio
 const CODE = {
 	_required:    [all(['_lid', '_gid', '_aid'])],
 	_recommended: ['_nid', '_uri', '_pid', '_name', '_symbol', '_symbol_print', '_regexp', '_emoji'],
-	_computed:    ['_gid', '_aid'],
+	_computed:    [{ _field: '_gid', _compute_kind: '_compute_kind_concat', _compute_from: ['_nid', '_lid'], _compute_separator: '_' },
+	               { _field: '_aid', _compute_kind: '_compute_kind_union',  _compute_from: ['_lid'] }],
 	_immutable:   ['_nid', '_lid', '_gid'],
 	_fields: [
 		{ _field: '_nid', _index: '_index_identity' },
@@ -93,13 +94,13 @@ test('formFields falls back to required-then-recommended without _fields', () =>
 	assert.deepEqual(fields.map(f => f.gid), ['b', 'a', 'd', 'c']);
 });
 
-test('formFields appends members _fields left out, and applies _default-value', () => {
+test('formFields appends members _fields left out; a retired _default-value map is ignored', () => {
 	const body = { _required: [all(['a'])], _recommended: ['b', 'c'], '_default-value': { c: 7 },
 	               _fields: [{ _field: 'c' }] };
 	const { fallback, fields } = formFields(body);
 	assert.equal(fallback, false);
 	assert.deepEqual(fields.map(f => f.gid), ['c', 'a', 'b']);
-	assert.equal(fields[0].default, 7);
+	assert.equal(fields[0].default, undefined);
 	assert.equal(fields[1].default, undefined);
 });
 
@@ -146,12 +147,13 @@ const UNION  = { _field: '_aid', _compute_kind: '_compute_kind_union',  _compute
 const CONST  = { _field: '_emoji', _compute_kind: '_compute_kind_constant', _compute_value: '🏷' };
 const CODE2  = Object.assign({}, CODE, { _computed: [CONCAT, UNION, CONST] });
 
-test('computedFields and computedEntry read both shapes', () => {
+test('computedFields and computedEntry read entry objects and skip everything else', () => {
 	assert.deepEqual(computedFields(CODE), ['_gid', '_aid']);
 	assert.deepEqual(computedFields(CODE2), ['_gid', '_aid', '_emoji']);
-	assert.deepEqual(computedFields({ _computed: ['_a', { _field: '_b' }, 7, {}, null] }), ['_a', '_b']);
+	assert.deepEqual(computedFields({ _computed: ['_a', { _field: '_b' }, 7, {}, null] }), ['_b']);   // '_a' is the retired bare-gid shape
 	assert.deepEqual(computedFields({}), []);
-	assert.equal(computedEntry(CODE, '_gid'), '_gid');
+	assert.equal(computedEntry(CODE, '_gid'), CODE._computed[0]);
+	assert.equal(computedEntry(CODE, '_a'), null);
 	assert.equal(computedEntry(CODE2, '_aid'), UNION);
 	assert.equal(computedEntry(CODE2, '_nid'), null);
 });
@@ -171,9 +173,9 @@ test('formFields: a constant entry is a pre-fill the user may change, not a comp
 	assert.equal(gid.default, undefined);
 	assert.equal(emoji.computed, false);
 	assert.equal(emoji.default, '🏷');
-	// the legacy map still answers when no constant entry exists
-	const legacy = formFields(Object.assign({}, CODE, { '_default-value': { _emoji: '✨' } }));
-	assert.equal(legacy.fields.find(f => f.gid === '_emoji').default, '✨');
+	// the retired _default-value map is not read any more
+	const stale = formFields(Object.assign({}, CODE, { '_default-value': { _emoji: '✨' } }));
+	assert.equal(stale.fields.find(f => f.gid === '_emoji').default, undefined);
 });
 
 test('allowedProperties is the closed-schema whitelist', () => {

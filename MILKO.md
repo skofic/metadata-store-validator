@@ -49,6 +49,7 @@ Semver intent: a new error code or a stricter check is **minor**; a change to th
 
 ### Releases
 
+- **v1.5.0** (2026-10-23) — **The string shape of `_computed` is gone.** The legacy `REGISTRY` table, the string branch of `resolveEntry`, the reverse (function-without-declaration) cross-check and the `_default-value` fallback of `formFields` are removed; a bare gid entry is `INVALID_COMPUTE` and runs nothing, `computedFields` skips it. `checkComputeRegistry` keeps the two checks that matter: every entry resolves, and `CORE_DECLARATIONS` equals the dictionary. No behaviour change for a dictionary already on the entry shape (both databases were, as of this date). Suites unchanged in size: 229 / 30 / 14 / 26 without a database, 261 with it.
 - **v1.1.1** (2026-09-15) — Documentation and tests only; library code identical to v1.1.0. README gains *Using it in a data pipeline* (install, snapshot once per run, per-record checks, end-of-run report, envelope checks with an example aggregation query, offline tests). Fixed the `_scope_enum` compound test, whose value used a bare `eng` that is not a term (now `ISO_639_3.ISO_639_3_eng`): `test:db` passes with no failures.
 - **v1.1.0** (2026-09-15) — **Outliers are warnings**: `RANGE_OUTLIER` (`_range_normal`) moves from `errors` to `warnings` in every entry point; only `_range_valid` and unit bounds make a value invalid (a consumer counting failed documents will see fewer). **`unit_range` enforced** on numeric values (`RANGE_VIOLATION` naming the unit), and `checkUnitBounds` / `UNIT_RANGE_CONFLICT` for descriptors whose declared range contradicts their unit (run by the CLI in term mode). **Bulk data**: `makeSnapshotDbAccess` + `buildSnapshot` + `makeHttpQuery`, `validateProperties`, `describeEnvelopeNeeds` / `validateEnvelope`, `createReport`, CLI `--summary`. `validateValue` / `validateDocument` return `warnings`; `validateFile` adds `warned` and `warnings`. Fixed: `validateDocument` / `validateFile` threw because they read `computeTermCode`'s `{ errors, warnings }` result as an array. The live adapter's edge logic moved to `lib/edge-index.js` (behaviour unchanged, shared with the snapshot).
 - **v1.0.2** (2026-09-02) — CLI `--exclude <path>`.
@@ -82,7 +83,7 @@ The validator logic lives in `lib/`. Three entry points are used:
 - `validateConformance(value, dataSection, path, dbAccess, opts)` — validates with dictionary-conformance checking: each property key of an object is looked up as a term and its value validated against that term's `_data` section. Also applies rule edges (`_predicate_property-of` and `_predicate_value-of` with non-empty `_path_data`).
 - `validateByDictionary(doc, descriptorGid, dbAccess, opts)` — public entry point; fetches the named descriptor from the DB then delegates to `validateConformance`.
 
-Computed-property logic lives in `lib/compute.js` (the driver) and `lib/compute-registry.js` (the interpreter of the six compute kinds, plus the legacy per-property functions):
+Computed-property logic lives in `lib/compute.js` (the driver) and `lib/compute-registry.js` (the interpreter of the six compute kinds):
 
 - `applyComputed(doc, descriptorGid, dbAccess, opts)` — runs every `_computed` entry of the descriptor's bodies; schema-driven with a dictionary, the built-in `CORE_DECLARATIONS` without one.
 - `checkComputeRegistry(dbAccess)` — the start-up cross-check between the dictionary's declarations and what the code can run.
@@ -236,9 +237,9 @@ Since v1.4.0 the dictionary declares *how* a property is computed, not only *tha
 | `_blob._key` | hash of `_blob_item`, `_blob_type`, `_blob_kind`, `_blob_identifier` joined by `/`, md5 |
 | `_domn._term_role` | rule `_compute_rule_term-role`: the five `assign-roles` rules (derived roles recomputed; user-assigned roles and `_term_role_system` kept) — needs the optional `dbAccess` facts `isPathRoot`, `isEnumItem`, `isNamespace`, `isPredicate`, `isEnumSource` |
 
-**Transition.** The legacy shape — a bare property gid, its rule the hand-written function in the module's `REGISTRY` table — is still accepted, and the two shapes may mix in one body, until every body in the dictionary carries object entries; then `REGISTRY` goes. `computedFields(body)` / `computedEntry(body, gid)` in `lib/fields.js` are the one reader of either shape, used by the whitelist union, the `_fields` check, `formFields`, the rule merge, the compute driver and the snapshot builder.
+**One shape (v1.5.0).** v1.4.0 also accepted the previous shape — a bare property gid, its rule a hand-written function in a `REGISTRY` table — so the dictionary could switch while a running service kept answering; once both databases carried object entries the table, the string branch of `resolveEntry` and the `_default-value` fallback of `formFields` were removed. A bare gid is now `INVALID_COMPUTE` and runs nothing. `computedFields(body)` / `computedEntry(body, gid)` in `lib/fields.js` are the one reader of the entries, used by the whitelist union, the `_fields` check, `formFields`, the rule merge, the compute driver and the snapshot builder.
 
-**The cross-check.** `checkComputeRegistry(dbAccess)` requires every declared entry to resolve, every legacy function's property to be declared, and `CORE_DECLARATIONS` to match the dictionary (same fields per core schema; identical entries once the dictionary carries objects). The CLI prints its findings at start-up. Found in v1.4.0: the Node HTTP adapter defined `listComputedDeclarations` but `makeEdgeBackedAccess` never copied it onto the accessor, so the check had returned `[]` unconditionally since v1.3.0 — `test/compute-db.test.js` now refuses to run without the method. `test/compute-db.test.js` also recomputes `_term_role` for every term of the live dictionary and requires the same answer `assign-roles` stored — the two implementations must agree.
+**The cross-check.** `checkComputeRegistry(dbAccess)` requires every declared entry to resolve and `CORE_DECLARATIONS` to match the dictionary (the same fields per core schema and identical entries, compared with sorted keys). The CLI prints its findings at start-up. Found in v1.4.0: the Node HTTP adapter defined `listComputedDeclarations` but `makeEdgeBackedAccess` never copied it onto the accessor, so the check had returned `[]` unconditionally since v1.3.0 — `test/compute-db.test.js` now refuses to run without the method. `test/compute-db.test.js` also recomputes `_term_role` for every term of the live dictionary and requires the same answer `assign-roles` stored — the two implementations must agree.
 
 **`_gid` computation rules:**
 
@@ -388,8 +389,8 @@ All error codes are defined in `lib/errors.js`:
 | `MISSING_FIELD` | A field required for property computation is absent |
 | `COMPUTE_MISMATCH` | Existing computed value differs from the expected value |
 | `COMPUTE_ADDED` | A computed property was absent or stale and was filled (warning) |
-| `NO_COMPUTE_FUNCTION` | A `_computed` entry names a kind, digest or rule the interpreter does not implement (or a legacy gid with no function) |
-| `INVALID_COMPUTE` | A `_computed` entry is malformed for its kind (parameter missing or mistyped) |
+| `NO_COMPUTE_FUNCTION` | A `_computed` entry names a kind, digest or rule the interpreter does not implement |
+| `INVALID_COMPUTE` | A `_computed` entry is malformed: not an entry object (a bare gid, retired in v1.5.0), or a parameter missing or mistyped |
 
 ---
 
