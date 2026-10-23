@@ -1,6 +1,6 @@
 {
   "name": "metadata-store-validator",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Dictionary-conformance validator for the metadata-store data dictionary: library (Node + ArangoDB Foxx), Node dbAccess adapter, and CLI.",
   "main": "index.js",
   "bin": {
@@ -23,8 +23,8 @@
     "README.md"
   ],
   "scripts": {
-    "test": "node test/run.js && node test/snapshot.test.js && node test/fields.test.js && node test/compute.test.js && node test/esm-import.test.mjs",
-    "test:db": "node test/run.js --db ../metadata-store/globals/auth/db.credentials.local.json --fixtures && node test/snapshot-parity.js --db ../metadata-store/globals/auth/db.credentials.local.json && node test/compute-db.test.js --db ../metadata-store/globals/auth/db.credentials.local.json"
+    "test": "node test/run.js && node test/snapshot.test.js && node test/fields.test.js && node test/compute.test.js && node test/index-plan.test.js && node test/esm-import.test.mjs",
+    "test:db": "node test/run.js --db ../metadata-store/globals/auth/db.credentials.local.json --fixtures && node test/snapshot-parity.js --db ../metadata-store/globals/auth/db.credentials.local.json && node test/compute-db.test.js --db ../metadata-store/globals/auth/db.credentials.local.json && node test/index-plan-db.test.js --db ../metadata-store/globals/auth/db.credentials.local.json"
   },
   "dependencies": {
     "geojson-s2": "github:skofic/geojson-s2#v1.0.0"

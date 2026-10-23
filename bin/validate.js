@@ -43,6 +43,10 @@
  *   --links-col <n>      Links collection name (default: links)
  *   --blobs-col <n>      Blobs collection name (default: blobs)
  *   --exclude <path>     Skip a file or directory under <path>; repeatable.
+ *   --index-plan <gid>   Print, as JSON, what the collection index of objects described
+ *                        by <gid> must cover (indexPlan), then exit; no target needed.
+ *   --languages <list>   Comma-separated ISO 639-3 gids the plan expands multilingual
+ *                        values over (default ISO_639_3_eng).
  *                        For directories that exist in the working tree but are
  *                        not loaded into the database (their cross-references
  *                        would otherwise fail against a dictionary lacking them).
@@ -102,6 +106,7 @@ function checkAnchorRoles(dbAccess) {
 }
 const { validateByDictionary, checkUnitBounds, createReport } = require('../lib');
 const { applyComputed, checkComputeRegistry } = require('../lib/compute');
+const { indexPlan }            = require('../lib/index-plan');
 
 // Load a credentials file, following a one-hop `use` pointer if present.
 // A pointer file is JSON like { "use": "db.credentials.local.json" }; it names a
@@ -337,6 +342,8 @@ function parseArgs(argv) {
 		case '--links-col':       args.linksCol       = argv[++i]; break;
 		case '--blobs-col':       args.blobsCol       = argv[++i]; break;
 		case '--exclude':         args.exclude.push(argv[++i]);   break;
+		case '--index-plan':      args.indexPlan      = argv[++i]; break;
+		case '--languages':       args.languages      = String(argv[++i] || '').split(',').filter(Boolean); break;
 		default:
 			if (!argv[i].startsWith('--')) args.target = argv[i];
 		}
@@ -412,6 +419,8 @@ function usage() {
 		'  --links-col <n>         Links collection name (default: links)',
 		'  --blobs-col <n>         Blobs collection name (default: blobs)',
 		'  --exclude <path>        Skip a file or directory under <path> (repeatable).',
+		'  --index-plan <gid>      Print what the collection index of <gid> objects must cover (JSON) and exit.',
+		'  --languages <list>      Comma-separated ISO 639-3 gids for --index-plan (default ISO_639_3_eng).',
 		'                          Use it for directories present in the tree but not',
 		'                          loaded into the database.',
 		'  --summary               Instead of each warning, print at the end the errors and',
@@ -451,7 +460,7 @@ function fmtItem(item, label, pathMap) {
 function main() {
 	const args = parseArgs(process.argv);
 
-	if (!args.target) { usage(); process.exit(1); }
+	if (!args.target && !args.indexPlan) { usage(); process.exit(1); }
 
 	// --persist implies --compute + --quiet-compute
 	if (args.persist) {
@@ -493,6 +502,14 @@ function main() {
 	checkAnchorRoles(dbAccess);
 
 	checkComputeDeclarations(dbAccess);
+
+	// --index-plan: print the abstract index plan of a root schema and stop.
+	if (args.indexPlan) {
+		const plan = indexPlan(args.indexPlan, dbAccess, { languages: args.languages });
+		console.log(JSON.stringify(plan, null, 2));
+		for (const p of plan.problems) console.error('WARNING: ' + p.path + ': ' + p.code + ' — ' + p.message);
+		process.exit(0);
+	}
 
 	const excluded = args.exclude.map(function(p) { return path.resolve(p); });
 	const files    = collectJsonFiles(path.resolve(args.target), excluded);

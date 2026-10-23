@@ -291,11 +291,30 @@ const { fallback, fields } = formFields(codeTerm._data._object._closed);
 //              immutable: true, default: undefined }
 ```
 
-`computed` is true for a property a `_computed` entry derives (hidden on creation, read-only afterwards) — except a **constant**-kind entry, which is a pre-fill the user may change: it is reported with `computed: false` and its `_compute_value` in `default`. (The retired `_default-value` map is no longer read.)
+`computed` is true for a property a `_computed` entry derives (hidden on creation, read-only afterwards) — except a **constant**-kind entry, which is a pre-fill the user may change: it is reported with `computed: false` and its `_compute_value` in `default`. (The retired `_default-value` map is no longer read.) `index` is the entry's `_index` intent, or the body's own `_index` when the container indexes every property it holds, or null.
 
 The order rule has one implementation, shared by a form builder, the `/ui` `GET /fields/:gid` route and an index generator: `_fields` order first, then any `_required` or `_recommended` property it left out, in required-then-recommended order; a body without `_fields` returns the whole list as that fallback (`fallback: true`). `required` is true only for a member of an unconditional `_all {}` selector; a property that belongs to a choice (`_any`, or `_all` with counts) carries `selector: { id, kind, min, max, group? }` instead, so the members of one selector can be rendered together as one choice.
 
 `checkFields` is the authoring check the conformance validator runs on every validated body that carries `_fields`: `FIELD_NOT_IN_SCHEMA` and `FIELD_BANNED` are errors, `FIELDS_INCOMPLETE` is a warning. Entry shape, descriptor existence and duplicate `_field` values are the ordinary `_objects` validation of the `_fields` term.
+
+### `indexPlan(rootGid, dbAccess, opts)` — what a collection index must cover
+
+```js
+const { indexPlan } = require('metadata-store-validator');
+const plan = indexPlan('_term', dbAccess, { languages: ['ISO_639_3_eng'] });
+// { root: '_term', languages: ['ISO_639_3_eng'],
+//   containers: [ { path: '_domn', gid: '_domn', intent: '_index_identity' } ],
+//   fields: [
+//     { path: '_code._gid',   gid: '_gid',   intent: '_index_segment',  leaf: '_string', shape: '_scalar' },
+//     { path: '_info._title', gid: '_title', intent: '_index_text',     leaf: '_text',   shape: '_dict',
+//       multilingual: true, languages: ['ISO_639_3_eng'] },
+//     { path: '_domn._class', gid: '_class', intent: '_index_identity', leaf: '_enum',   shape: '_scalar',
+//       enums: ['_class'], single: true },
+//     … ],
+//   problems: [] }
+```
+
+The dictionary says how the objects of a collection are indexed: each `_fields` entry of a schema body may carry an `_index` intent — `_index_identity` (one token: exact match, a facet when the leaf is an enumeration), `_index_text` (analysed text; on a multilingual value one field per configured language) or `_index_segment` (the value split on the `_` namespace separator; the `_gid` index) — and a body may carry `_index` itself, meaning the container indexes **every** property it holds (`_domn`). `indexPlan` walks the root schema through its containers (one `_typedef` hop at each level, arrays and sets unwrapped) and returns that as data: `containers` for the index-all bodies, `fields` for the hinted leaves with their leaf type and shape, `multilingual` or `dict` when the value is a language-keyed or a free dictionary, `enums` / `single` for enumeration leaves (a facet's roots and whether an object carries one value or several). It names no analyzer, no index name and no database feature: the service that owns the collection maps the plan to its inverted index and compares the result with the live one (`metadata-store-service`, `lib/index-gen.js`). `problems` are advisory — `UNKNOWN_TERM`, `HINT_ON_CONTAINER`, `UNINDEXABLE_SHAPE`, `SEGMENT_ON_NON_STRING`, `TEXT_ON_TOKEN`, `IDENTITY_ON_TEXT`, `UNKNOWN_INTENT`, `TOO_DEEP` — never thrown. The CLI prints a plan with `--index-plan <gid>` (`--languages a,b` to expand more languages).
 
 ## Unit physical bounds (`unit_range`)
 

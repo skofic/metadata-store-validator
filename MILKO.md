@@ -49,6 +49,7 @@ Semver intent: a new error code or a stricter check is **minor**; a change to th
 
 ### Releases
 
+- **v1.6.0** (2026-10-23) — **`indexPlan(rootGid, dbAccess, opts)`** (`lib/index-plan.js`): the abstract index plan of a collection read from the dictionary — the `_index` hints of every `_fields` entry down the containers, plus the body-level `_index` (a container that indexes every property it holds, new in the dictionary this round, `_domn` carries it), the new `_index_segment` intent (`_gid`), multilingual expansion over `opts.languages`, leaf types, facet roots and single/multi cardinality, advisory problems. `formFields` reports the body-level intent on entries without one. CLI `--index-plan <gid>` / `--languages`. The service maps the plan to its ArangoDB index (round 3b); the DB test proves the plan of `_term` names exactly the fields of the hand-written `idx_search`. No validation behaviour changes.
 - **v1.5.0** (2026-10-23) — **The string shape of `_computed` is gone.** The legacy `REGISTRY` table, the string branch of `resolveEntry`, the reverse (function-without-declaration) cross-check and the `_default-value` fallback of `formFields` are removed; a bare gid entry is `INVALID_COMPUTE` and runs nothing, `computedFields` skips it. `checkComputeRegistry` keeps the two checks that matter: every entry resolves, and `CORE_DECLARATIONS` equals the dictionary. No behaviour change for a dictionary already on the entry shape (both databases were, as of this date). Suites unchanged in size: 229 / 30 / 14 / 26 without a database, 261 with it.
 - **v1.1.1** (2026-09-15) — Documentation and tests only; library code identical to v1.1.0. README gains *Using it in a data pipeline* (install, snapshot once per run, per-record checks, end-of-run report, envelope checks with an example aggregation query, offline tests). Fixed the `_scope_enum` compound test, whose value used a bare `eng` that is not a term (now `ISO_639_3.ISO_639_3_eng`): `test:db` passes with no failures.
 - **v1.1.0** (2026-09-15) — **Outliers are warnings**: `RANGE_OUTLIER` (`_range_normal`) moves from `errors` to `warnings` in every entry point; only `_range_valid` and unit bounds make a value invalid (a consumer counting failed documents will see fewer). **`unit_range` enforced** on numeric values (`RANGE_VIOLATION` naming the unit), and `checkUnitBounds` / `UNIT_RANGE_CONFLICT` for descriptors whose declared range contradicts their unit (run by the CLI in term mode). **Bulk data**: `makeSnapshotDbAccess` + `buildSnapshot` + `makeHttpQuery`, `validateProperties`, `describeEnvelopeNeeds` / `validateEnvelope`, `createReport`, CLI `--summary`. `validateValue` / `validateDocument` return `warnings`; `validateFile` adds `warned` and `warnings`. Fixed: `validateDocument` / `validateFile` threw because they read `computeTermCode`'s `{ errors, warnings }` result as an array. The live adapter's edge logic moved to `lib/edge-index.js` (behaviour unchanged, shared with the snapshot).
@@ -110,6 +111,10 @@ Term documents are fetched on demand by `getTerm(gid)` and cached with an LRU ca
 3. **Applies triggered presence rules** independently via `validateData()` — their `_required` and `_banned` constraints are enforced on top of the base schema.
 4. **Applies value-of rules** — when `_target` is present on the edge, the rule is directed at a specific sub-property of the object (target-scoped rule) rather than the whole object. Target-scoped rules replace dictionary validation for their targeted property.
 5. **Recurses** into `_object`, `_array` (element type `_object`), `_dict` (value type `_object`), `_typedef`, and `_keyed` sub-shapes.
+
+### Index plan (`lib/index-plan.js`)
+
+`indexPlan(rootGid, dbAccess, { languages })` walks a root schema (`_term`, `std_dataset_meta`, …) through its containers — `bodyOf` resolves a property's term to its `_open`/`_closed` body through one `_typedef` hop — and collects two things: the **containers** whose body carries `_index` (they index every property they hold; the service maps them to `includeAllFields`) and the **fields** whose `_fields` entry carries `_index`, each with its path, intent (`_index_identity` / `_index_text` / `_index_segment`), leaf scalar type (arrays, sets and one typedef per level unwrapped — `_examples` is an `_array` of the multilingual `_info_text` typedef and resolves correctly), `multilingual` (a `_dict` keyed by `ISO_639_3`, or a term / typedef carrying `_term_role_multilingual`) with the configured languages, `dict` for any other dictionary, and for `_enum` leaves the roots (`enums`) and `single` (scalar vs set — what decides radio buttons and switch counts in the search page). The walk names nothing database-specific; `problems` are advice about the declarations, never errors. The DB test (`test/index-plan-db.test.js`) pins the plan of `_term` to the concrete field list the service's index must carry.
 
 ### `_fields` check (`lib/fields.js`)
 
@@ -261,6 +266,15 @@ node bin/validate.js --terms-col myterms --edges-col myedges --credentials … .
 | `--edges-col <n>` | `edges` |
 | `--links-col <n>` | `links` |
 | `--blobs-col <n>` | `blobs` |
+
+### Printing a collection's index plan
+
+```bash
+node bin/validate.js --credentials …/db.credentials.local.json --index-plan _term
+node bin/validate.js --credentials …/db.credentials.local.json --index-plan std_dataset_meta --languages ISO_639_3_eng,ISO_639_3_ita
+```
+
+Prints `indexPlan`'s JSON for the root schema and exits (no target directory needed); declaration problems go to stderr as warnings. This is what the service generates its index from — read it when a hint change does not do what you expected.
 
 ### Skipping part of the tree
 
