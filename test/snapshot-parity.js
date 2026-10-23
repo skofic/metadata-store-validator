@@ -64,8 +64,16 @@ function normalise(result) {
 		}
 	});
 
+	// The compute cross-check must read the same declarations from either side.
+	const liveDecl = JSON.stringify((live.listComputedDeclarations() || []).slice().sort((a, b) => a.gid < b.gid ? -1 : 1));
+	const snapDecl = JSON.stringify((snap.listComputedDeclarations() || []).slice().sort((a, b) => a.gid < b.gid ? -1 : 1));
+	if (liveDecl !== snapDecl) { failed++; console.log('DIFFER  listComputedDeclarations\n  live:     ' + liveDecl + '\n  snapshot: ' + snapDecl); }
+	const checkLive = v.checkComputeRegistry(live), checkSnap = v.checkComputeRegistry(snap);
+	if (JSON.stringify(checkLive) !== JSON.stringify(checkSnap)) { failed++; console.log('DIFFER  checkComputeRegistry\n  live:     ' + JSON.stringify(checkLive) + '\n  snapshot: ' + JSON.stringify(checkSnap)); }
+
 	console.log('snapshot-parity: ' + Object.keys(snapshot.terms).length + ' terms, ' +
-		snapshot.enumEdges.length + ' enum edges; ' + (RECORDS.length - failed) + '/' + RECORDS.length + ' records identical');
+		snapshot.enumEdges.length + ' enum edges; ' + (RECORDS.length - Math.min(failed, RECORDS.length)) + '/' + RECORDS.length + ' records identical; ' +
+		'registry cross-check ' + (checkLive.length === 0 ? 'clean' : checkLive.length + ' problem(s)') + ' on both sides');
 	process.exit(failed > 0 ? 1 : 0);
 })().catch(err => {
 	console.error('snapshot-parity: ' + (err && err.stack || err));

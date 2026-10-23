@@ -29,7 +29,8 @@
  *   --cache-size <n>     LRU cache size for term lookups (default: 500)
  *   --strict             UNKNOWN_PROPERTY is an error (default for named modes)
  *   --lenient            UNKNOWN_PROPERTY is a warning
- *   --compute            Fill every computed property the schema declares (_key, _gid,
+ *   --compute            Fill every computed property the schema declares — each `_computed`
+ *                        entry interpreted by its kind; legacy gid entries still accepted — (_key, _gid,
  *                        _aid, and _term_role when the database is reachable); warn when absent
  *   --strict-compute     Absent computed properties are errors instead of warnings
  *   --quiet-compute      Fill in computed properties silently (no warning)
@@ -398,7 +399,7 @@ function usage() {
 		'  --cache-size <n>        LRU cache size for term lookups (default: 500)',
 		'  --strict                UNKNOWN_PROPERTY is an error (default for named modes)',
 		'  --lenient               UNKNOWN_PROPERTY is a warning',
-		'  --compute               Fill every declared computed property (_key, _gid, _aid, _term_role); warn when absent',
+		'  --compute               Fill every declared computed property (_key, _gid, _aid, _term_role), each entry run by its kind; warn when absent',
 		'  --strict-compute        Absent computed properties are errors, not warnings',
 		'  --quiet-compute         Fill in computed properties silently (no warning)',
 		'  --no-fill               Report absent computed properties without filling them in',

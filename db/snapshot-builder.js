@@ -21,8 +21,8 @@
  *   - every term those terms' _data sections refer to, followed until nothing
  *     new turns up: `_typedef` targets, `_unit` terms (for their physical
  *     bound), `_enums` roots, the property gids an object schema lists
- *     (`_required` selections, `_recommended`, `_banned`, `_computed`,
- *     `_locked`, `_immutable`) and `_keyed` schema keys;
+ *     (`_required` selections, `_recommended`, `_banned`, `_computed` — the
+ *     `_field` of each entry — `_locked`, `_immutable`) and `_keyed` schema keys;
  *   - the enumeration edges of every `_enums` root found;
  *   - all property-of and value-of rule edges (a small, whole-collection set).
  *
@@ -35,10 +35,11 @@
  */
 
 const { collectEnumSources } = require('../lib/edge-index');
+const { computedFields }     = require('../lib/fields');
 const queries    = require('./queries');
 const { ANCHOR } = require('../lib/type-registry');
 
-const SCHEMA_LISTS = new Set(['_recommended', '_banned', '_computed', '_locked', '_immutable', '_selection']);
+const SCHEMA_LISTS = new Set(['_recommended', '_banned', '_locked', '_immutable', '_selection']);
 
 function flattenStrings(value, out) {
 	if (typeof value === 'string') out.push(value);
@@ -65,6 +66,9 @@ function collectRefs(node, addTerm, addRoot) {
 			}
 		} else if (SCHEMA_LISTS.has(key)) {
 			for (const gid of flattenStrings(value, [])) if (gid) addTerm(gid);
+		} else if (key === '_computed') {
+			// legacy gid strings, or entry objects naming the property in _field
+			for (const gid of computedFields({ _computed: value })) addTerm(gid);
 		} else if (key === '_keyed' && value && typeof value === 'object' && !Array.isArray(value)) {
 			for (const sibling of Object.keys(value)) addTerm(sibling);
 		}
@@ -142,6 +146,10 @@ async function buildSnapshot(params) {
 	catch (_) { predicates = await run(queries.predicatesQuery(edgesCol, null)); }
 	const enumSources = collectEnumSources(await run(queries.dataSectionsQuery(termsCol)));
 
+	// Every schema body declaring computed properties, so checkComputeRegistry
+	// can run against the snapshot (one query, a handful of rows).
+	const computedDeclarations = await run(queries.computedDeclarationsQuery(termsCol));
+
 	return {
 		version:  1,
 		termsCol,
@@ -155,6 +163,7 @@ async function buildSnapshot(params) {
 		namespaces,
 		predicates,
 		enumSources,
+		computedDeclarations,
 	};
 }
 

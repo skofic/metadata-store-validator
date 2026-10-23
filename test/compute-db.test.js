@@ -8,7 +8,9 @@
  * through the compute registry over the Node HTTP adapter must give the same
  * answer on every term — otherwise the two implementations disagree and one
  * of them is wrong. Also recomputes _code._gid / _aid and _key and expects no
- * mismatch anywhere.
+ * mismatch anywhere. The registry cross-check (checkComputeRegistry) must run
+ * for real: the HTTP adapter has to expose listComputedDeclarations — it did
+ * not until v1.4.0, so the check silently passed.
  *
  *   node test/compute-db.test.js --db ../metadata-store/globals/auth/db.credentials.local.json
  */
@@ -38,6 +40,7 @@ const termsCol = (credentials.collections || {}).terms || 'terms';
 			else if (f.code !== 'COMPUTE_ADDED' || f.path !== '_code._aid') otherFindings.push({ gid: stored._key, code: f.code, path: f.path });
 		}
 	}
+	if (typeof dbAccess.listComputedDeclarations !== 'function') { console.error('compute-db: the HTTP adapter does not expose listComputedDeclarations — the cross-check cannot run'); process.exit(1); }
 	const problems = v.checkComputeRegistry(dbAccess);
 	console.log(`compute-db: ${checked} terms; _term_role differences: ${roleDiffs.length}; other findings: ${otherFindings.length}; registry cross-check problems: ${problems.length}`);
 	for (const d of roleDiffs.slice(0, 20)) console.log('  ', d.gid, 'stored', JSON.stringify(d.stored), 'computed', JSON.stringify(d.computed));

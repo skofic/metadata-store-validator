@@ -75,6 +75,14 @@ test('a snapshot without the anchor terms is refused', () => {
 	delete broken.terms._type_scalar;
 	assert.throws(() => v.makeSnapshotDbAccess(broken), /_type_scalar/);
 });
+test('a snapshot carrying computedDeclarations answers listComputedDeclarations; one without does not', () => {
+	assert.equal(typeof access.listComputedDeclarations, 'undefined');
+	const rows = [{ gid: '_code', computed: ['_gid'] }];
+	const withDecl = v.makeSnapshotDbAccess(Object.assign({}, snapshot, { computedDeclarations: rows }));
+	assert.deepEqual(withDecl.listComputedDeclarations(), rows);
+	assert.ok(v.checkComputeRegistry(withDecl).some(p => p.startsWith('_code: the built-in fallback')));
+});
+
 test('the snapshot survives a JSON round trip', () => {
 	const copy = v.makeSnapshotDbAccess(JSON.parse(JSON.stringify(snapshot)));
 	assert.equal(copy.isEnumMember('_TEST_colors_orange', ['_TEST_colors']), true);

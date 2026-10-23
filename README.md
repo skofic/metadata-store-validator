@@ -151,7 +151,7 @@ const result = validateValue(
 
 ### `validateDocument(doc, descriptor, dbAccess, opts)`
 
-Resolves computed properties then validates a single document — a term, an edge, a link, a blob, or any object whose descriptor declares `_computed` — against the descriptor's `_data` section. Mutates `doc` in place to add computed fields (see *Computed properties* below). Returns `{ errors, warnings, coercions, computed }`; compute warnings (e.g. `COMPUTE_ADDED`) appear in `warnings`, and `computed` lists every fill as `{ path, value }`.
+Resolves computed properties (every `_computed` entry of the descriptor's bodies, interpreted by kind) then validates a single document — a term, an edge, a link, a blob, or any object whose descriptor declares `_computed` — against the descriptor's `_data` section. Mutates `doc` in place to add computed fields (see *Computed properties* below). Returns `{ errors, warnings, coercions, computed }`; compute warnings (e.g. `COMPUTE_ADDED`) appear in `warnings`, and `computed` lists every fill as `{ path, value }`.
 
 ```js
 const doc = { _code: { _nid: 'ISO_3166', _lid: 'ITA' } };
@@ -235,16 +235,32 @@ Authoring check: reports `UNIT_RANGE_CONFLICT` when a descriptor's declared `_ra
 
 ### `applyComputed(doc, descriptorGid, dbAccess, opts)` / `checkComputeRegistry(dbAccess)` — computed properties
 
-A schema body declares which of its properties the system supplies (`_computed`). The functions behind those declarations live in `lib/compute-registry.js`, keyed the way the dictionary declares them — by the schema term, then the property:
+A schema body declares the properties the system supplies in `_computed`, one entry per property, each stating the **kind** of computation and its parameters. `lib/compute-registry.js` is the interpreter of six kinds; `lib/compute.js` the driver.
 
-| Declaration | Rule |
-|---|---|
-| `_code._gid` | `_nid` absent → `_lid`; `""` → `"_" + _lid`; else `_nid + "_" + _lid` |
-| `_code._aid` | the stored list ∪ `[_lid]` (merge) |
-| `_term._key` | `_code._gid` |
-| `_edge._key`, `_link._key` | `LOWER(MD5(_from + "/" + _predicate + "/" + _to))` — handles must be resolved first |
-| `_blob._key` | `LOWER(MD5(_blob_item + "/" + _blob_type + "/" + _blob_kind + "/" + _blob_identifier))` |
-| `_domn._term_role` | the derived roles (descriptor, namespace, predicate, enum-root, enum-item, enum-source) recomputed from the term and the graph; user-assigned roles and `_term_role_system` kept as found (merge) |
+| Kind (`_compute_kind`) | Parameters | Absent inputs | Stored value present |
+|---|---|---|---|
+| `_compute_kind_copy` | `_compute_from` (exactly one path) | nothing computed | replaced — a different value is `COMPUTE_MISMATCH` |
+| `_compute_kind_concat` | `_compute_from` (ordered paths), `_compute_separator` | absent parts skipped (`""` counts as present) | replaced |
+| `_compute_kind_hash` | `_compute_from`, `_compute_separator`, `_compute_digest` (`_compute_digest_md5` → lowercase hex) | any absent part → nothing computed | replaced |
+| `_compute_kind_union` | `_compute_from` (each value, scalar or array, added if missing) | contributes nothing | merged — a stale list is `COMPUTE_ADDED` and filled |
+| `_compute_kind_rule` | `_compute_rule` (`_compute_rule_term-role`: the `assign-roles` rules) | the rule decides | merged |
+| `_compute_kind_constant` | `_compute_value` (any JSON, deep-copied) | — | kept as found: a constant only fills an absence |
+
+Paths in `_compute_from` are container-relative (`_scope_object` strings: `_lid` inside `_code`, `_code._gid` on the term root), `_compute_from` is ordered and its paths must be unique, and the entries of one body apply in list order. The six core declarations:
+
+```json
+"_code":  [ { "_field": "_gid", "_compute_kind": "_compute_kind_concat", "_compute_from": ["_nid", "_lid"], "_compute_separator": "_" },
+            { "_field": "_aid", "_compute_kind": "_compute_kind_union",  "_compute_from": ["_lid"] } ]
+"_term":  [ { "_field": "_key", "_compute_kind": "_compute_kind_copy",   "_compute_from": ["_code._gid"] } ]
+"_edge", "_link":
+          [ { "_field": "_key", "_compute_kind": "_compute_kind_hash",   "_compute_from": ["_from", "_predicate", "_to"],
+              "_compute_separator": "/", "_compute_digest": "_compute_digest_md5" } ]
+"_blob":  [ { "_field": "_key", "_compute_kind": "_compute_kind_hash",   "_compute_from": ["_blob_item", "_blob_type", "_blob_kind", "_blob_identifier"],
+              "_compute_separator": "/", "_compute_digest": "_compute_digest_md5" } ]
+"_domn":  [ { "_field": "_term_role", "_compute_kind": "_compute_kind_rule", "_compute_rule": "_compute_rule_term-role" } ]
+```
+
+**Transition.** A `_computed` entry may still be a bare property gid (the shape every body carried before v1.4.0); its rule is then the hand-written function in the legacy `REGISTRY` table of the same module. Both shapes may mix in one body. `computedFields(body)` / `computedEntry(body, gid)` (exported) read either shape and are what every consumer of the list uses. The legacy table goes once the dictionary carries object entries everywhere.
 
 ```js
 const { applyComputed } = require('metadata-store-validator');
@@ -255,11 +271,11 @@ const { errors, warnings, computed } = applyComputed(doc, '_term', dbAccess, { q
 // computed: [{ path: '_code._gid', value: 'chr_NewVariable' }, …]
 ```
 
-With a `dbAccess` the walk is **schema-driven**: the descriptor's body is read from the dictionary, containers are computed before their parent, a container the document lacks is created when its schema declares computed properties (a new term gets its `_domn`), and a declared property with no registered function is reported as `NO_COMPUTE_FUNCTION`. Without a `dbAccess` the fixed core layout is used (terms, edges/links, blobs), which is what the historical `compute.computeTermCode` / `computeEdgeKey` / `computeBlobKey` wrappers do.
+With a `dbAccess` the walk is **schema-driven**: the descriptor's body is read from the dictionary, containers are computed before their parent, a container the document lacks is created when its schema declares computed properties (a new term gets its `_domn`), and an entry that cannot run is an error at the property's path — `NO_COMPUTE_FUNCTION` (a kind, digest or rule the interpreter does not implement, or a legacy gid with no function), `INVALID_COMPUTE` (a parameter missing or mistyped), `DUPLICATE_VALUE` (a repeated `_compute_from` path). Without a `dbAccess` the driver runs `CORE_DECLARATIONS` — the six declarations above, built in — over the fixed core layout (terms, edges/links, blobs); that is what the historical `compute.computeTermCode` / `computeEdgeKey` / `computeBlobKey` wrappers do.
 
-Absent values are filled and reported as `COMPUTE_ADDED` (a warning, an error under `strictCompute`, silent under `quietCompute`, reported without filling under `noFill`). A present value that disagrees is `COMPUTE_MISMATCH` and is never repaired — except for the two **merge** entries (`_aid`, `_term_role`), whose stale stored value is filled and reported as `COMPUTE_ADDED`. `_term_role` needs five optional `dbAccess` facts (see the contract below); when the accessor cannot answer them the stored roles are left alone.
+Absent values are filled and reported as `COMPUTE_ADDED` (a warning, an error under `strictCompute`, silent under `quietCompute`, reported without filling under `noFill`). Every computed value, written or not, is kept in a shadow keyed by document path, so under `noFill` `_term._key` is still reported from the `_code._gid` that was computed but not written. The term-role rule needs five optional `dbAccess` facts (see the contract below); when the accessor cannot answer them the stored roles are left alone.
 
-`checkComputeRegistry(dbAccess)` compares every `_computed` declaration in the dictionary with the registry, both ways, and returns the differences as strings (the CLI prints them at start-up). It needs `dbAccess.listComputedDeclarations()`.
+`checkComputeRegistry(dbAccess)` returns the differences between the dictionary's `_computed` declarations and what the code can run, as strings (the CLI prints them at start-up): every declared entry must resolve; every legacy function's property must be declared by its schema; and the built-in `CORE_DECLARATIONS` must match the dictionary — same computed fields per core schema and, where the dictionary already carries object entries, identical entries. It needs `dbAccess.listComputedDeclarations()`, which the Node HTTP adapter, a snapshot built since v1.4.0 and the Foxx adapter provide. (Before v1.4.0 the HTTP adapter dropped the method on its way through `makeEdgeBackedAccess`, so the check always reported nothing.)
 
 ### `formFields(body)` / `checkFields(body, path)` — the presentation list
 
@@ -274,6 +290,8 @@ const { fallback, fields } = formFields(codeTerm._data._object._closed);
 //              required: false, selector: null, computed: false, locked: false,
 //              immutable: true, default: undefined }
 ```
+
+`computed` is true for a property a `_computed` entry derives (hidden on creation, read-only afterwards) — except a **constant**-kind entry, which is a pre-fill the user may change: it is reported with `computed: false` and its `_compute_value` in `default`. (The legacy `_default-value` map is still read for `default` until the term is retired.)
 
 The order rule has one implementation, shared by a form builder, the `/ui` `GET /fields/:gid` route and an index generator: `_fields` order first, then any `_required` or `_recommended` property it left out, in required-then-recommended order; a body without `_fields` returns the whole list as that fallback (`fallback: true`). `required` is true only for a member of an unconditional `_all {}` selector; a property that belongs to a choice (`_any`, or `_all` with counts) carries `selector: { id, kind, min, max, group? }` instead, so the members of one selector can be rendered together as one choice.
 
@@ -524,8 +542,9 @@ Every error and warning has the same shape:
 | `INVALID_TYPEDEF` | The typedef term has no usable `_data` section |
 | `MISSING_FIELD` | A field required for property computation is absent |
 | `COMPUTE_MISMATCH` | A computed property is present but its value disagrees with the computed result |
-| `COMPUTE_ADDED` | **Warning** — a computed property was absent (or stale, for the merge entries `_aid` / `_term_role`); the computed value was added (or should be added) |
-| `NO_COMPUTE_FUNCTION` | A schema body declares a property `_computed` but the compute registry has no function for it |
+| `COMPUTE_ADDED` | **Warning** — a computed property was absent (or stale, for a merge kind: union, rule); the computed value was added (or should be added) |
+| `NO_COMPUTE_FUNCTION` | A `_computed` entry names a kind, digest or rule the interpreter does not implement, or a legacy gid no function exists for |
+| `INVALID_COMPUTE` | A `_computed` entry is malformed for its kind: a parameter missing or of the wrong type, an empty `_compute_from`, more than one path on a copy |
 
 ---
 
@@ -587,8 +606,9 @@ const dbAccess = {
   isPredicate(gid)   { /* some edge's or link's _predicate */ return true; },
   isEnumSource(gid)  { /* named in some _enums array */ return true; },
 
-  // Optional — [{ gid, computed[] }] for every schema body declaring _computed;
-  // used by checkComputeRegistry().
+  // Optional — [{ gid, computed[] }] for every schema body declaring _computed,
+  // the entries passed through as stored (gid strings or entry objects); used
+  // by checkComputeRegistry().
   listComputedDeclarations() { /* ... */ return []; },
 
 };

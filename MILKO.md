@@ -82,11 +82,11 @@ The validator logic lives in `lib/`. Three entry points are used:
 - `validateConformance(value, dataSection, path, dbAccess, opts)` — validates with dictionary-conformance checking: each property key of an object is looked up as a term and its value validated against that term's `_data` section. Also applies rule edges (`_predicate_property-of` and `_predicate_value-of` with non-empty `_path_data`).
 - `validateByDictionary(doc, descriptorGid, dbAccess, opts)` — public entry point; fetches the named descriptor from the DB then delegates to `validateConformance`.
 
-Computed-property logic lives in `lib/compute.js`:
+Computed-property logic lives in `lib/compute.js` (the driver) and `lib/compute-registry.js` (the interpreter of the six compute kinds, plus the legacy per-property functions):
 
-- `computeTermCode(doc, opts)` — fills/verifies `_key`, `_code._gid`, `_code._aid` for term documents.
-- `computeEdgeKey(doc, opts)` — fills/verifies `_key = MD5(_from/_predicate/_to)` for edge documents.
-- `computeBlobKey(doc, opts)` — fills/verifies `_key = MD5(_blob_item/_blob_type/_blob_kind/_blob_identifier)` for blob documents.
+- `applyComputed(doc, descriptorGid, dbAccess, opts)` — runs every `_computed` entry of the descriptor's bodies; schema-driven with a dictionary, the built-in `CORE_DECLARATIONS` without one.
+- `checkComputeRegistry(dbAccess)` — the start-up cross-check between the dictionary's declarations and what the code can run.
+- `computeTermCode` / `computeEdgeKey` / `computeBlobKey` — the historical wrappers over the no-dictionary path.
 
 ### How the DB access works
 
@@ -223,20 +223,22 @@ node bin/validate.js --compute --no-fill --credentials … ../metadata-store/dat
 node bin/validate.js --persist --resolve-handles --credentials … ../metadata-store/data/core/
 ```
 
-### Computed properties — the registry
+### Computed properties — the interpreter (v1.4.0)
 
-The rules live in `lib/compute-registry.js`, keyed by the schema term whose body declares the property (`_computed`) and by the property; `lib/compute.js` is the driver. With a database the driver reads the descriptor's body and walks the document bottom-up (containers first, so `_code._gid` exists before `_term._key` asks for it); a container the document lacks is created when its schema declares computed properties; a declaration with no function is `NO_COMPUTE_FUNCTION`. Without a database the fixed core layout below is used, chosen by the descriptor or by document shape.
+Since v1.4.0 the dictionary declares *how* a property is computed, not only *that* it is: each `_computed` entry is an object `{ _field, _compute_kind, …parameters }`, and `lib/compute-registry.js` interprets six kinds — copy, concat, hash, union, rule, constant (the README table has their parameters and their replace / merge / fill-only behaviour). `lib/compute.js` is the driver. With a database it reads the descriptor's body and walks the document bottom-up (containers first, so `_code._gid` exists before `_term._key` copies it); a container the document lacks is created when its schema declares computed properties; entries apply in list order; an entry that cannot run is `NO_COMPUTE_FUNCTION` (unknown kind / digest / rule), `INVALID_COMPUTE` (a parameter missing or mistyped) or `DUPLICATE_VALUE` (a repeated `_compute_from` path). A value computed under `noFill` is kept in a shadow keyed by document path so later entries still see it. Without a database the driver runs `CORE_DECLARATIONS` — the six core bodies in the declared shape, built into the module — over the fixed core layout.
 
-| Declaration | Formula |
+| Declaration | Entry |
 |---|---|
-| `_code._gid` | `_nid + "_" + _lid` (see rules below) |
-| `_code._aid` | must contain `_lid` (merge: filled, not a mismatch) |
-| `_term._key` | same as `_gid` |
-| `_edge._key`, `_link._key` | `LOWER(MD5(_from + "/" + _predicate + "/" + _to))` |
-| `_blob._key` | `LOWER(MD5(_blob_item + "/" + _blob_type + "/" + _blob_kind + "/" + _blob_identifier))` |
-| `_domn._term_role` | the five `assign-roles` rules (derived roles recomputed; user-assigned roles and `_term_role_system` kept) — needs the optional `dbAccess` facts `isPathRoot`, `isEnumItem`, `isNamespace`, `isPredicate`, `isEnumSource` |
+| `_code._gid` | concat of `_nid`, `_lid` with `_` — absent `_nid` skipped, `""` kept, hence `_code` (see rules below) |
+| `_code._aid` | union: `_lid` added to the stored list (merge: filled, not a mismatch) |
+| `_term._key` | copy of `_code._gid` |
+| `_edge._key`, `_link._key` | hash of `_from`, `_predicate`, `_to` joined by `/`, md5, lowercase |
+| `_blob._key` | hash of `_blob_item`, `_blob_type`, `_blob_kind`, `_blob_identifier` joined by `/`, md5 |
+| `_domn._term_role` | rule `_compute_rule_term-role`: the five `assign-roles` rules (derived roles recomputed; user-assigned roles and `_term_role_system` kept) — needs the optional `dbAccess` facts `isPathRoot`, `isEnumItem`, `isNamespace`, `isPredicate`, `isEnumSource` |
 
-The CLI cross-checks the registry against every `_computed` declaration at start-up (`checkComputeRegistry`) and warns on a difference in either direction. `test/compute-db.test.js` recomputes `_term_role` for every term of the live dictionary and requires the same answer `assign-roles` stored — the two implementations must agree.
+**Transition.** The legacy shape — a bare property gid, its rule the hand-written function in the module's `REGISTRY` table — is still accepted, and the two shapes may mix in one body, until every body in the dictionary carries object entries; then `REGISTRY` goes. `computedFields(body)` / `computedEntry(body, gid)` in `lib/fields.js` are the one reader of either shape, used by the whitelist union, the `_fields` check, `formFields`, the rule merge, the compute driver and the snapshot builder.
+
+**The cross-check.** `checkComputeRegistry(dbAccess)` requires every declared entry to resolve, every legacy function's property to be declared, and `CORE_DECLARATIONS` to match the dictionary (same fields per core schema; identical entries once the dictionary carries objects). The CLI prints its findings at start-up. Found in v1.4.0: the Node HTTP adapter defined `listComputedDeclarations` but `makeEdgeBackedAccess` never copied it onto the accessor, so the check had returned `[]` unconditionally since v1.3.0 — `test/compute-db.test.js` now refuses to run without the method. `test/compute-db.test.js` also recomputes `_term_role` for every term of the live dictionary and requires the same answer `assign-roles` stored — the two implementations must agree.
 
 **`_gid` computation rules:**
 
@@ -386,7 +388,8 @@ All error codes are defined in `lib/errors.js`:
 | `MISSING_FIELD` | A field required for property computation is absent |
 | `COMPUTE_MISMATCH` | Existing computed value differs from the expected value |
 | `COMPUTE_ADDED` | A computed property was absent or stale and was filled (warning) |
-| `NO_COMPUTE_FUNCTION` | A schema body declares a computed property the registry has no function for |
+| `NO_COMPUTE_FUNCTION` | A `_computed` entry names a kind, digest or rule the interpreter does not implement (or a legacy gid with no function) |
+| `INVALID_COMPUTE` | A `_computed` entry is malformed for its kind (parameter missing or mistyped) |
 
 ---
 

@@ -7,7 +7,7 @@
  */
 
 const assert = require('node:assert/strict');
-const { formFields, checkFields, allowedProperties } = require('..');
+const { formFields, checkFields, allowedProperties, computedFields, computedEntry } = require('..');
 
 let passed = 0;
 const failures = [];
@@ -137,6 +137,43 @@ test('checkFields: a missing recommended property is only FIELDS_INCOMPLETE', ()
 test('checkFields: a body without _fields reports nothing', () => {
 	const r = checkFields(RANGE, []);
 	assert.deepEqual(r, { errors: [], warnings: [] });
+});
+
+// ── _computed in the new shape (entry objects) ────────────────────────────────
+
+const CONCAT = { _field: '_gid', _compute_kind: '_compute_kind_concat', _compute_from: ['_nid', '_lid'], _compute_separator: '_' };
+const UNION  = { _field: '_aid', _compute_kind: '_compute_kind_union',  _compute_from: ['_lid'] };
+const CONST  = { _field: '_emoji', _compute_kind: '_compute_kind_constant', _compute_value: '🏷' };
+const CODE2  = Object.assign({}, CODE, { _computed: [CONCAT, UNION, CONST] });
+
+test('computedFields and computedEntry read both shapes', () => {
+	assert.deepEqual(computedFields(CODE), ['_gid', '_aid']);
+	assert.deepEqual(computedFields(CODE2), ['_gid', '_aid', '_emoji']);
+	assert.deepEqual(computedFields({ _computed: ['_a', { _field: '_b' }, 7, {}, null] }), ['_a', '_b']);
+	assert.deepEqual(computedFields({}), []);
+	assert.equal(computedEntry(CODE, '_gid'), '_gid');
+	assert.equal(computedEntry(CODE2, '_aid'), UNION);
+	assert.equal(computedEntry(CODE2, '_nid'), null);
+});
+
+test('allowedProperties and checkFields see the _field of an entry object', () => {
+	assert.deepEqual([...allowedProperties(CODE2)].sort(), [...allowedProperties(CODE)].sort());
+	const r = checkFields(CODE2, []);
+	assert.deepEqual(r.errors, []);
+	assert.deepEqual(r.warnings, []);
+});
+
+test('formFields: a constant entry is a pre-fill the user may change, not a computed field', () => {
+	const { fields } = formFields(CODE2);
+	const gid = fields.find(f => f.gid === '_gid');
+	const emoji = fields.find(f => f.gid === '_emoji');
+	assert.equal(gid.computed, true);
+	assert.equal(gid.default, undefined);
+	assert.equal(emoji.computed, false);
+	assert.equal(emoji.default, '🏷');
+	// the legacy map still answers when no constant entry exists
+	const legacy = formFields(Object.assign({}, CODE, { '_default-value': { _emoji: '✨' } }));
+	assert.equal(legacy.fields.find(f => f.gid === '_emoji').default, '✨');
 });
 
 test('allowedProperties is the closed-schema whitelist', () => {
