@@ -114,7 +114,7 @@ Term documents are fetched on demand by `getTerm(gid)` and cached with an LRU ca
 
 ### Index plan (`lib/index-plan.js`)
 
-`indexPlan(rootGid, dbAccess, { languages })` walks a root schema (`_term`, `std_dataset_meta`, …) through its containers — `bodyOf` resolves a property's term to its `_open`/`_closed` body through one `_typedef` hop — and collects two things: the **containers** whose body carries `_index` (they index every property they hold; the service maps them to `includeAllFields`) and the **fields** whose `_fields` entry carries `_index`, each with its path, intent (`_index_identity` / `_index_text` / `_index_segment`), leaf scalar type (arrays, sets and one typedef per level unwrapped — `_examples` is an `_array` of the multilingual `_info_text` typedef and resolves correctly), `multilingual` (a `_dict` keyed by `ISO_639_3`, or a term / typedef carrying `_term_role_multilingual`) with the configured languages, `dict` for any other dictionary, and for `_enum` leaves the roots (`enums`) and `single` (scalar vs set — what decides radio buttons and switch counts in the search page). The walk names nothing database-specific; `problems` are advice about the declarations, never errors. The DB test (`test/index-plan-db.test.js`) pins the plan of `_term` to the concrete field list the service's index must carry.
+`indexPlan(rootGid, dbAccess, { languages })` walks a root schema (`_term`, `std_dataset`, …) through its containers — `bodyOf` resolves a property's term to its `_open`/`_closed` body through one `_typedef` hop — and collects two things: the **containers** whose body carries `_index` (they index every property they hold; the service maps them to `includeAllFields`) and the **fields** whose `_fields` entry carries `_index`, each with its path, intent (`_index_identity` / `_index_text` / `_index_segment`), leaf scalar type (arrays, sets and one typedef per level unwrapped — `_examples` is an `_array` of the multilingual `_info_text` typedef and resolves correctly), `multilingual` (a `_dict` keyed by `ISO_639_3`, or a term / typedef carrying `_term_role_multilingual`) with the configured languages, `dict` for any other dictionary, and for `_enum` leaves the roots (`enums`) and `single` (scalar vs set — what decides radio buttons and switch counts in the search page). The walk names nothing database-specific; `problems` are advice about the declarations, never errors. The DB test (`test/index-plan-db.test.js`) pins the plan of `_term` to the concrete field list the service's index must carry.
 
 ### `_fields` check (`lib/fields.js`)
 
@@ -271,7 +271,7 @@ node bin/validate.js --terms-col myterms --edges-col myedges --credentials … .
 
 ```bash
 node bin/validate.js --credentials …/db.credentials.local.json --index-plan _term
-node bin/validate.js --credentials …/db.credentials.local.json --index-plan std_dataset_meta --languages ISO_639_3_eng,ISO_639_3_ita
+node bin/validate.js --credentials …/db.credentials.local.json --index-plan std_dataset --languages ISO_639_3_eng,ISO_639_3_ita
 ```
 
 Prints `indexPlan`'s JSON for the root schema and exits (no target directory needed); declaration problems go to stderr as warnings. This is what the service generates its index from — read it when a hint change does not do what you expected.
