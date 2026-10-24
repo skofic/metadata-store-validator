@@ -29,6 +29,7 @@ const plan = v.indexPlan('_term', dbAccess);
 const paths = plan.fields.flatMap(f => f.multilingual ? f.languages.map(l => f.path + '.' + l) : [f.path]).sort();
 
 const expected = [
+	'_key',
 	'_code._aid', '_code._gid', '_code._lid', '_code._name', '_code._nid', '_code._pid',
 	'_info._definition.ISO_639_3_eng', '_info._description.ISO_639_3_eng', '_info._examples.ISO_639_3_eng',
 	'_info._issues.ISO_639_3_eng', '_info._methods.ISO_639_3_eng', '_info._references._citation',
@@ -41,7 +42,7 @@ const expected = [
 const failures = [];
 function check(name, ok, detail) { if (!ok) failures.push(name + (detail ? ': ' + detail : '')); }
 
-check('field paths equal the idx_search set plus the _domn facets', JSON.stringify(paths) === JSON.stringify(expected),
+check('field paths equal the idx_search set plus the _domn facets and the document key', JSON.stringify(paths) === JSON.stringify(expected),
 	'\n  plan:     ' + paths.join(', ') + '\n  expected: ' + expected.join(', '));
 check('_domn indexes everything it holds', JSON.stringify(plan.containers) === JSON.stringify([{ path: '_domn', gid: '_domn', intent: '_index_identity' }]), JSON.stringify(plan.containers));
 check('_gid is indexed by segments', (plan.fields.find(f => f.path === '_code._gid') || {}).intent === '_index_segment');
@@ -49,6 +50,7 @@ check('_name is the one _code field indexed as text', plan.fields.filter(f => f.
 check('every _info field is text', plan.fields.filter(f => f.path.startsWith('_info.')).every(f => f.intent === '_index_text'));
 check('the facets are the _enum leaves of _domn, _class and _subject single-valued',
 	JSON.stringify(plan.fields.filter(f => f.leaf === '_enum' && f.single).map(f => f.gid).sort()) === JSON.stringify(['_class', '_subject']));
+check('_key is indexed whole, as a root-level field', (plan.fields.find(f => f.path === '_key') || {}).intent === '_index_identity');
 check('no declaration problem', plan.problems.length === 0, JSON.stringify(plan.problems));
 
 console.log('index-plan-db: ' + plan.fields.length + ' fields, ' + plan.containers.length + ' index-all container(s), ' + plan.problems.length + ' problems');
