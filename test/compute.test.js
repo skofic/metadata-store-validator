@@ -291,6 +291,99 @@ test('malformed entries: INVALID_COMPUTE, DUPLICATE_VALUE, NO_COMPUTE_FUNCTION',
 	assert.deepEqual(r.errors.map(e => e.code + ' ' + e.path), ['DUPLICATE_VALUE _code._gid']);
 });
 
+// ── generate and service: the kinds the validator cannot (fully) run ─────────
+
+// A dataset-like schema: a key the collection assigns, a date the clock
+// writes, a count a service derives, a list the author may seed.
+const DS = Object.assign({}, DICT, {
+	ds: term('ds', { _object: { _closed: {
+		_required: all(['_key', 'ds_code', 'ds_date', 'ds_count']), _recommended: ['ds_terms'],
+		_computed: [
+			{ _field: '_key',     _compute_kind: '_compute_kind_generate', _compute_generator: '_compute_generator_key' },
+			{ _field: 'ds_date',  _compute_kind: '_compute_kind_generate', _compute_generator: '_compute_generator_now' },
+			{ _field: 'ds_count', _compute_kind: '_compute_kind_service',  _compute_service: '_compute_service_stats' },
+			{ _field: 'ds_terms', _compute_kind: '_compute_kind_service',  _compute_service: '_compute_service_stats' },
+		],
+		_locked: ['_key', 'ds_date', 'ds_count'], _immutable: ['_key', 'ds_code', 'ds_date'] } } }),
+	ds_code:  term('ds_code',  { _scalar: { _string: {} } }),
+	ds_date:  term('ds_date',  { _scalar: { _string_YMD: { _scale_time: '_scale_day' } } }),
+	ds_count: term('ds_count', { _scalar: { _number_integer: {} } }),
+	ds_terms: term('ds_terms', { _set: { _string: {} } }),
+});
+const dsAccess = () => access({ terms: DS });
+const AT = new Date('2026-10-25T14:23:07.457Z');
+
+test('generate/now fills an absent date in the property\'s declared type and never argues with a present one', () => {
+	const doc = { ds_code: 'X' };
+	const r = applyComputed(doc, 'ds', dsAccess(), { now: AT });
+	assert.equal(doc.ds_date, '20261025');
+	assert.ok(r.computed.some(c => c.path === 'ds_date' && c.value === '20261025'));
+	const kept = { ds_code: 'X', ds_date: '19990101' };
+	const r2 = applyComputed(kept, 'ds', dsAccess(), { now: AT });
+	assert.equal(kept.ds_date, '19990101');
+	assert.equal(r2.errors.length, 0);
+});
+
+test('generate/key and service write nothing: an absent value is pending, a present one is kept', () => {
+	const doc = { ds_code: 'X', ds_terms: ['a'] };
+	const r = applyComputed(doc, 'ds', dsAccess(), { now: AT });
+	assert.equal(doc._key, undefined);
+	assert.equal(doc.ds_count, undefined);
+	assert.deepEqual(doc.ds_terms, ['a']);                           // seeded: kept for the service to verify
+	assert.deepEqual(r.pending.sort(), ['_key', 'ds_count']);         // ds_terms is present, so not pending
+	assert.deepEqual(r.warnings.filter(w => w.code === 'COMPUTE_PENDING').map(w => w.path).sort(), ['_key', 'ds_count']);
+	assert.equal(r.errors.length, 0);
+	const quiet = applyComputed({ ds_code: 'X' }, 'ds', dsAccess(), { now: AT, quietCompute: true });
+	assert.equal(quiet.warnings.length, 0);
+	assert.deepEqual(quiet.pending.sort(), ['_key', 'ds_count', 'ds_terms']);   // nothing seeded this time
+});
+
+test('validateDocument: a required property that is pending is not MISSING_REQUIRED', () => {
+	const db = dsAccess();
+	const doc = { ds_code: 'X' };
+	const r = v.validateDocument(doc, db.getTerm('ds'), db, { now: AT });
+	assert.deepEqual(r.errors, []);
+	assert.deepEqual(r.pending.sort(), ['_key', 'ds_count', 'ds_terms']);    // ds_terms: absent, so the service fills it
+	assert.equal(doc.ds_date, '20261025');
+	// Without compute (no descriptor compute path) the same document is simply incomplete.
+	const plain = v.validateValue({ ds_code: 'X' }, db.getTerm('ds')._data, db, {});
+	assert.deepEqual(plain.errors.map(e => e.code + ':' + e.path).sort(), ['MISSING_REQUIRED:_key', 'MISSING_REQUIRED:ds_count', 'MISSING_REQUIRED:ds_date']);
+});
+
+test('generate/now without a dictionary cannot know the type: pending, not a guess', () => {
+	const body = { _computed: [{ _field: 'when', _compute_kind: '_compute_kind_generate', _compute_generator: '_compute_generator_now' }] };
+	const doc = {};
+	const r = require('../lib/compute').applyComputed(doc, null, null, {});
+	assert.equal(doc.when, undefined);                                // the fallback layout knows no such entry
+	assert.equal(r.pending.length, 0);
+	// through the registry directly: no dbAccess → undefined
+	const e = resolveEntry('x', body._computed[0]);
+	assert.equal(e.pending, true);
+	assert.equal(e.compute({}, {}, { shadow: {}, containerPath: [] }), undefined);
+});
+
+test('generate and service entries: unknown generator is NO_COMPUTE_FUNCTION, a service must be named', () => {
+	const bad = e => resolveEntry('x', e).problem;
+	assert.equal(bad({ _field: '_key', _compute_kind: '_compute_kind_generate', _compute_generator: '_compute_generator_uuid' }).code, 'NO_COMPUTE_FUNCTION');
+	assert.equal(bad({ _field: '_key', _compute_kind: '_compute_kind_generate' }).code, 'INVALID_COMPUTE');
+	assert.equal(bad({ _field: 'n', _compute_kind: '_compute_kind_service' }).code, 'INVALID_COMPUTE');
+	assert.equal(bad({ _field: 'n', _compute_kind: '_compute_kind_service', _compute_service: '' }).code, 'INVALID_COMPUTE');
+	assert.equal(resolveEntry('x', { _field: 'n', _compute_kind: '_compute_kind_service', _compute_service: '_compute_service_any' }).problem, undefined);
+});
+
+test('nowFor writes each time type and truncates to the scale, never rounding', () => {
+	const { nowFor } = v.computeRegistry;
+	assert.equal(nowFor('_string_YMD', undefined, AT), '20261025');
+	assert.equal(nowFor('_string_YMD', '_scale_month', AT), '202610');
+	assert.equal(nowFor('_string_YMD', '_scale_year', AT), '2026');
+	assert.equal(nowFor('_string_date', undefined, AT), '2026-10-25');
+	assert.equal(nowFor('_string_time', '_scale_minute', AT), '14:23:00');
+	assert.equal(nowFor('_string_date-time', undefined, AT), '2026-10-25T14:23:07Z');
+	assert.equal(nowFor('_timestamp', undefined, AT), 1792938187);
+	assert.equal(nowFor('_timestamp', '_scale_hour', AT), 1792936800);
+	assert.equal(nowFor('_number_float', undefined, AT), undefined);
+});
+
 test('validateDocument runs the schema-driven compute and reports fills', () => {
 	const doc = { _code: { _nid: 'ns', _lid: 'item' }, _info: { _title: { ISO_639_3_eng: 'Item' } } };
 	const r = v.validateDocument(doc, DICT._term, access(), { quietCompute: true });

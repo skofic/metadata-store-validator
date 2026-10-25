@@ -235,7 +235,7 @@ Authoring check: reports `UNIT_RANGE_CONFLICT` when a descriptor's declared `_ra
 
 ### `applyComputed(doc, descriptorGid, dbAccess, opts)` / `checkComputeRegistry(dbAccess)` — computed properties
 
-A schema body declares the properties the system supplies in `_computed`, one entry per property, each stating the **kind** of computation and its parameters. `lib/compute-registry.js` is the interpreter of six kinds; `lib/compute.js` the driver.
+A schema body declares the properties the system supplies in `_computed`, one entry per property, each stating the **kind** of computation and its parameters. `lib/compute-registry.js` is the interpreter of eight kinds; `lib/compute.js` the driver.
 
 | Kind (`_compute_kind`) | Parameters | Absent inputs | Stored value present |
 |---|---|---|---|
@@ -245,6 +245,8 @@ A schema body declares the properties the system supplies in `_computed`, one en
 | `_compute_kind_union` | `_compute_from` (each value, scalar or array, added if missing) | contributes nothing | merged — a stale list is `COMPUTE_ADDED` and filled |
 | `_compute_kind_rule` | `_compute_rule` (`_compute_rule_term-role`: the `assign-roles` rules) | the rule decides | merged |
 | `_compute_kind_constant` | `_compute_value` (any JSON, deep-copied) | — | kept as found: a constant only fills an absence |
+| `_compute_kind_generate` | `_compute_generator` — `_compute_generator_now` (the current date and time in the property's declared type, truncated to its `_scale_time`; needs a `dbAccess` to read the type) or `_compute_generator_key` (the collection assigns it: nothing is computed here) | — | kept as found; an absent value the interpreter cannot produce is **pending** (`COMPUTE_PENDING` warning, listed in `pending`) |
+| `_compute_kind_service` | `_compute_service` (the gid of the process that derives it, declared by the project that runs it) | — | kept as found — a seed the service verifies; an absent value is **pending** for the service |
 
 Paths in `_compute_from` are container-relative (`_scope_object` strings: `_lid` inside `_code`, `_code._gid` on the term root), `_compute_from` is ordered and its paths must be unique, and the entries of one body apply in list order. The six core declarations:
 
@@ -277,6 +279,8 @@ Absent values are filled and reported as `COMPUTE_ADDED` (a warning, an error un
 
 `checkComputeRegistry(dbAccess)` returns the differences between the dictionary's `_computed` declarations and what the code can run, as strings (the CLI prints them at start-up): every declared entry must resolve, and the built-in `CORE_DECLARATIONS` must match the dictionary — the same computed fields per core schema and identical entries (compared with sorted keys, since ArangoDB returns object keys sorted). It needs `dbAccess.listComputedDeclarations()`, which the Node HTTP adapter, a snapshot built since v1.4.0 and the Foxx adapter provide. (Before v1.4.0 the HTTP adapter dropped the method on its way through `makeEdgeBackedAccess`, so the check always reported nothing.)
 
+**Pending.** `applyComputed` returns `pending`, the paths of the absent properties the collection or a service fills at or after insertion. `validateDocument` removes the `MISSING_REQUIRED` of those paths (`dropPendingRequired(errors, pending)` is exported for callers that run `applyComputed` themselves), so a dataset record whose key the collection assigns and whose count a service derives validates before it is inserted. `opts.now` fixes the moment a `now` generator writes (tests).
+
 ### `formFields(body)` / `checkFields(body, path)` — the presentation list
 
 A schema body (the content of `_open` or `_closed`) may carry `_fields`: an ordered list with one entry per property, stating the order a form presents the properties in, the panel each belongs to (`_group`, default `_group_main`) and whether the property is indexed in the collection holding the object (`_index`). The rule lists decide presence and mode; `_fields` only adds presentation.
@@ -287,11 +291,11 @@ const { formFields } = require('metadata-store-validator');
 const { fallback, fields } = formFields(codeTerm._data._object._closed);
 // fallback: false (the body carries _fields)
 // fields[0]: { gid: '_nid', group: '_group_main', index: '_index_identity',
-//              required: false, selector: null, computed: false, locked: false,
-//              immutable: true, default: undefined }
+//              required: false, selector: null, computed: false, compute: null,
+//              computedBy: null, locked: false, immutable: true, default: undefined }
 ```
 
-`computed` is true for a property a `_computed` entry derives (hidden on creation, read-only afterwards) — except a **constant**-kind entry, which is a pre-fill the user may change: it is reported with `computed: false` and its `_compute_value` in `default`. (The retired `_default-value` map is no longer read.) `index` is the entry's `_index` intent, or the body's own `_index` when the container indexes every property it holds, or null.
+`computed` is true for a property a `_computed` entry derives (read-only once the object exists) — except a **constant**-kind entry, which is a pre-fill the user may change: it is reported with `computed: false` and its `_compute_value` in `default`. `compute` carries the entry's `_compute_kind` gid (null when not computed) and `computedBy` the generator, service or rule gid it names, which is what tells the creation modes apart: the declarative kinds (copy, concat, hash, union, rule) are hidden on creation; a generated value is shown read-only, pre-filled by the form when it can produce it (`_compute_generator_now`) and blank when only the database can (`_compute_generator_key`); a service-derived value is absent on creation when `locked` and an input the user may seed when not. `group` is `_group_main`, `_group_more` or `_group_hidden` (never presented, in any form or display). `index` is the entry's `_index` intent, or the body's own `_index` when the container indexes every property it holds, or null.
 
 The order rule has one implementation, shared by a form builder, the `/ui` `GET /fields/:gid` route and an index generator: `_fields` order first, then any `_required` or `_recommended` property it left out, in required-then-recommended order; a body without `_fields` returns the whole list as that fallback (`fallback: true`). `required` is true only for a member of an unconditional `_all {}` selector; a property that belongs to a choice (`_any`, or `_all` with counts) carries `selector: { id, kind, min, max, group? }` instead, so the members of one selector can be rendered together as one choice.
 

@@ -104,6 +104,29 @@ test('formFields appends members _fields left out; a retired _default-value map 
 	assert.equal(fields[1].default, undefined);
 });
 
+test('formFields reports the compute kind and what runs it; _group_hidden passes through', () => {
+	const body = {
+		_required: [all(['_key', 'code', 'count', 'cols'])], _recommended: ['terms'],
+		_computed: [
+			{ _field: '_key',  _compute_kind: '_compute_kind_generate', _compute_generator: '_compute_generator_key' },
+			{ _field: 'count', _compute_kind: '_compute_kind_service',  _compute_service: '_compute_service_stats' },
+			{ _field: 'terms', _compute_kind: '_compute_kind_service',  _compute_service: '_compute_service_stats' },
+			{ _field: 'cols',  _compute_kind: '_compute_kind_service',  _compute_service: '_compute_service_insert' },
+		],
+		_locked: ['_key', 'count', 'cols'], _immutable: ['_key', 'code'],
+		_fields: [{ _field: '_key' }, { _field: 'code' }, { _field: 'terms' }, { _field: 'count', _group: '_group_more' }, { _field: 'cols', _group: '_group_hidden' }],
+	};
+	const { fields } = formFields(body);
+	const f = gid => fields.find(x => x.gid === gid);
+	assert.deepEqual([f('_key').compute, f('_key').computedBy, f('_key').computed, f('_key').locked], ['_compute_kind_generate', '_compute_generator_key', true, true]);
+	assert.deepEqual([f('count').compute, f('count').computedBy, f('count').locked], ['_compute_kind_service', '_compute_service_stats', true]);
+	assert.deepEqual([f('terms').compute, f('terms').locked, f('terms').required], ['_compute_kind_service', false, false]);
+	assert.deepEqual([f('code').compute, f('code').computedBy, f('code').immutable], [null, null, true]);
+	assert.equal(f('cols').group, '_group_hidden');
+	const c = formFields(CODE).fields.find(x => x.gid === '_gid');
+	assert.deepEqual([c.compute, c.computedBy], ['_compute_kind_concat', null]);
+});
+
 test('checkFields passes a complete, admitted list', () => {
 	const r = checkFields(CODE, []);
 	assert.deepEqual(r.errors, []);
