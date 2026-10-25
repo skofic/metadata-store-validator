@@ -320,6 +320,14 @@ const plan = indexPlan('_term', dbAccess, { languages: ['ISO_639_3_eng'] });
 
 The dictionary says how the objects of a collection are indexed: each `_fields` entry of a schema body may carry an `_index` intent — `_index_identity` (one token: exact match, a facet when the leaf is an enumeration), `_index_text` (analysed text; on a multilingual value one field per configured language) or `_index_segment` (the value split on the `_` namespace separator; the `_gid` index) — and a body may carry `_index` itself, meaning the container indexes **every** property it holds (`_domn`). `indexPlan` walks the root schema through its containers (one `_typedef` hop at each level, arrays and sets unwrapped) and returns that as data: `containers` for the index-all bodies, `fields` for the hinted leaves with their leaf type and shape, `multilingual` or `dict` when the value is a language-keyed or a free dictionary, `enums` / `single` for enumeration leaves (a facet's roots and whether an object carries one value or several). It names no analyzer, no index name and no database feature: the service that owns the collection maps the plan to its inverted index and compares the result with the live one (`metadata-store-service`, `lib/index-gen.js`). `problems` are advisory — `UNKNOWN_TERM`, `HINT_ON_CONTAINER`, `UNINDEXABLE_SHAPE`, `SEGMENT_ON_NON_STRING`, `TEXT_ON_TOKEN`, `IDENTITY_ON_TEXT`, `UNKNOWN_INTENT`, `TOO_DEEP` — never thrown. The CLI prints a plan with `--index-plan <gid>` (`--languages a,b` to expand more languages).
 
+## Sibling-drawn containers (`_subset-of`)
+
+A `_set` or `_array` body may carry `_subset-of` beside `_elements`: a `_scope_object` path, resolved from the **containing object**, naming a sibling whose value supplies the allowed elements (an array or set as it is, a scalar as a one-element set). Every element of the validated container must be one of them, else `NOT_IN_SIBLING` at the element's path. An absent sibling, or no containing object (a bare `validateValue` of the container alone), imposes nothing. The containing object reaches the check as `opts.parentObject`, which `validateDocument` sets for depth-1 properties and `validateConformance` on every descent — so the check is live through `validateByDictionary` and the `/validate/document` route.
+
+```json
+{ "_set": { "_term_key_descriptor": {}, "_subset-of": "std_terms" } }
+```
+
 ## Unit physical bounds (`unit_range`)
 
 A unit term may carry `_prop.unit_range`, a `_range` object stating a bound no value in that unit can cross — kelvin ≥ 0, °C ≥ −273.15, percent 0…100. When a numeric descriptor selects such a unit via `_unit`, a value must satisfy **both** the descriptor's `_range_valid` and the unit's bound (their intersection). A breach of the unit bound is a `RANGE_VIOLATION` whose message names the unit. Without a `dbAccess` the unit term cannot be read and the bound is not checked.
